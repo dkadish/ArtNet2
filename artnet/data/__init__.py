@@ -64,10 +64,10 @@ class ArtNetDataset(VisionDataset):
         target["iscrowd"] = iscrowd
 
         if self.transforms is not None:
-            print('Transforms: ', self.transforms)
-            print('Transforms list: ', self.transforms.transforms)
-            print('img: ', img)
-            print('target: ', target)
+            # print('Transforms: ', self.transforms)
+            # print('Transforms list: ', self.transforms.transforms)
+            # print('img: ', img)
+            # print('target: ', target)
             img, target = self.transforms(img, target)
 
         return img, target#, image_id
