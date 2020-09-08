@@ -63,10 +63,10 @@ class ArtNetDataset(VisionDataset):
         target["area"] = area
         target["iscrowd"] = iscrowd
 
-        # if self.transforms is not None:
-        #     print(img)
-        #     print(target)
-        #     img, target = self.transforms(img), target
+        if self.transforms is not None:
+            print(img)
+            print(target)
+            img, target = self.transforms(img), target
 
         return img, target#, image_id
 
