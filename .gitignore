@@ -290,11 +290,10 @@ Network Trash Folder
 Temporary Items
 .apdisk
 
-
-data/
-
 *.zip
 
 notebooks/PennFudanPed/
 
 notebooks/vision/
+
+data/ArtNet/
