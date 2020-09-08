@@ -66,7 +66,7 @@ class ArtNetDataset(VisionDataset):
         if self.transforms is not None:
             print(img)
             print(target)
-            img, target = self.transforms(img), target
+            img, target = self.transforms(img, target)
 
         return img, target#, image_id
 
