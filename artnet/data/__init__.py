@@ -54,22 +54,20 @@ class ArtNetDataset(VisionDataset):
                 ymax = int(bndbox.find('ymax').text)
                 bbox = (xmin, ymin, xmax, ymax)
                 boxes.append(bbox)
+
+            # get bounding box coordinates for each mask
+            num_objs = len(boxes)
+
+            boxes = torch.as_tensor(boxes, dtype=torch.float32)
+            # there is only one class
+            labels = torch.ones((num_objs,), dtype=torch.int64)
         except (StopIteration, FileNotFoundError) as e:  # There's no file there.
-            pass
-
-        # get bounding box coordinates for each mask
-        num_objs = len(boxes)
-
-        boxes = torch.as_tensor(boxes, dtype=torch.float32)
-        # there is only one class
-        labels = torch.ones((num_objs,), dtype=torch.int64)
+            num_objs = 0
+            boxes = torch.zeros((0, 4), dtype=torch.float32)
+            labels = torch.zeros(0, dtype=torch.int64)
 
         image_id = torch.tensor([idx])
-        try:
-            area = (boxes[:, 3] - boxes[:, 1]) * (boxes[:, 2] - boxes[:, 0])
-        except IndexError as e:
-            area = 0
-
+        area = (boxes[:, 3] - boxes[:, 1]) * (boxes[:, 2] - boxes[:, 0])
         # suppose all instances are not crowd
         iscrowd = torch.zeros((num_objs,), dtype=torch.int64)
 
