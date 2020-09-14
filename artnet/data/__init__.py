@@ -61,13 +61,14 @@ class ArtNetDataset(VisionDataset):
             boxes = torch.as_tensor(boxes, dtype=torch.float32)
             # there is only one class
             labels = torch.ones((num_objs,), dtype=torch.int64)
-        except (StopIteration, FileNotFoundError) as e:  # There's no file there.
+            area = (boxes[:, 3] - boxes[:, 1]) * (boxes[:, 2] - boxes[:, 0])
+        except (StopIteration, FileNotFoundError, IndexError) as e:  # There's no file there.
             num_objs = 0
             boxes = torch.zeros((0, 4), dtype=torch.float32)
             labels = torch.zeros(0, dtype=torch.int64)
+            area = (boxes[:, 3] - boxes[:, 1]) * (boxes[:, 2] - boxes[:, 0])
 
         image_id = torch.tensor([idx])
-        area = (boxes[:, 3] - boxes[:, 1]) * (boxes[:, 2] - boxes[:, 0])
         # suppose all instances are not crowd
         iscrowd = torch.zeros((num_objs,), dtype=torch.int64)
 
