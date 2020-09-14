@@ -27,8 +27,6 @@ class ArtNetDataset(VisionDataset):
     def __getitem__(self, idx):
         # Handle slices
         if isinstance(idx, slice):
-            print(idx)
-            print(len(self))
             start, stop, step = idx.indices(len(self))
             return [self[i] for i in range(start, stop, step)]
         elif isinstance(idx, tuple):
