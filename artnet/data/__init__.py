@@ -178,12 +178,13 @@ class VOCDetectionSubset(VOCDetection, WeightMixin):
             labels = torch.zeros(0, dtype=torch.int64)
             area = (boxes[:, 3] - boxes[:, 1]) * (boxes[:, 2] - boxes[:, 0])
 
+        image_id = torch.tensor([index])
         iscrowd = torch.zeros((num_objs,), dtype=torch.int64)
 
         ann = {
             'area': area,
             'boxes': boxes,
-            'image_id': 0,
+            'image_id': image_id,
             'iscrowd': iscrowd,
             'labels': labels,
             'source': 'voc'
