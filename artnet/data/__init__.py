@@ -57,7 +57,8 @@ class ArtNetDataset(VisionDataset, WeightMixin):
                  root: str,
                  transforms: Optional[Callable] = None,
                  transform: Optional[Callable] = None,
-                 target_transform: Optional[Callable] = None, source='artnet') -> None:
+                 target_transform: Optional[Callable] = None, source='artnet',
+                 image_set=None) -> None:
         VisionDataset.__init__(self, root, transform=transform, transforms=transforms,
                          target_transform=target_transform)
         WeightMixin.__init__(self)
@@ -66,8 +67,16 @@ class ArtNetDataset(VisionDataset, WeightMixin):
         # ensure that they are aligned
         # self.imgs = list(sorted((Path(self.root) / "JPEGImages").iterdir()))
         # self.annotations = list(sorted((Path(self.root) / "Annotations").iterdir()))
-        self.imgs = list((self._root / 'JPEGImages').glob('**/*.jpg'))
         self.source = source
+
+        if image_set is None:
+            self.imgs = list((self._root / 'JPEGImages').glob('**/*.jpg'))
+        else:
+            with open((self._root / 'ImageSets' / 'Main' / image_set).with_suffix('.txt')) as f:
+                file_names = [x.strip() for x in f.readlines()]
+
+            self.imgs = [(self._root / 'JPEGImages' / x).with_suffix('.jpg') for x in file_names]
+
 
     def __getitem__(self, idx):
         # Handle slices
