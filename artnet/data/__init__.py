@@ -1,12 +1,12 @@
 import xml.etree.ElementTree as ET
-from functools import cached_property
 from pathlib import Path
 from typing import Callable, Optional, Sized
 
 import torch
 import torch.utils.data
 from PIL import Image
-from torchvision.datasets import VisionDataset, VOCSegmentation, VOCDetection
+from torchvision.datasets import VisionDataset, VOCDetection
+
 
 class WeightMixin(Sized):
 
