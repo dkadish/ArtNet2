@@ -1,15 +1,15 @@
 import math
 import sys
 import time
-import torch
 
+import torch
 import torchvision.models.detection.mask_rcnn
 from torch import nn
 from torch.optim import Optimizer
 
-from .coco_utils import get_coco_api_from_dataset
-from .coco_eval import CocoEvaluator
 from . import utils
+from .coco_eval import CocoEvaluator
+from .coco_utils import get_coco_api_from_dataset
 
 
 def train_one_epoch(model: nn.Module, optimizer: Optimizer, data_loader, device, epoch, print_freq):
@@ -56,12 +56,13 @@ def train_one_epoch(model: nn.Module, optimizer: Optimizer, data_loader, device,
 
     return metric_logger
 
+
 def train_one_epoch_tb_logs(model: nn.Module, optimizer: Optimizer, data_loader, device, epoch, writer):
     running_loss = 0.0
 
     model.train()
 
-    #TODO This ignores the learning rate scheduling that is already assigned. Do I remove?
+    # TODO This ignores the learning rate scheduling that is already assigned. Do I remove?
     lr_scheduler = None
     if epoch == 0:
         warmup_factor = 1. / 1000
@@ -72,7 +73,7 @@ def train_one_epoch_tb_logs(model: nn.Module, optimizer: Optimizer, data_loader,
     for i, (images, targets) in enumerate(data_loader):
 
         images = list(image.to(device) for image in images)
-        targets = [{k: v.to(device) for k, v in t.items()} for t in targets]
+        targets = [{k: v.to(device) for k, v in t.items() if isinstance(v, torch.Tensor)} for t in targets]
 
         loss_dict = model(images, targets)
 
@@ -97,7 +98,7 @@ def train_one_epoch_tb_logs(model: nn.Module, optimizer: Optimizer, data_loader,
             lr_scheduler.step()
 
         running_loss += losses.item()
-        if i % 1000 == 999:  # every 1000 mini-batches...
+        if i % 100 == 99:  # every 1000 mini-batches...
 
             # ...log the running loss
             writer.add_scalar('training loss',
@@ -110,6 +111,7 @@ def train_one_epoch_tb_logs(model: nn.Module, optimizer: Optimizer, data_loader,
             #                   plot_classes_preds(net, inputs, labels),
             #                   global_step=epoch * len(data_loader) + i)
             running_loss = 0.0
+
 
 def _get_iou_types(model):
     model_without_ddp = model
@@ -139,7 +141,7 @@ def evaluate(model, data_loader, device):
 
     for images, targets in metric_logger.log_every(data_loader, 100, header):
         images = list(img.to(device) for img in images)
-        targets = [{k: v.to(device) for k, v in t.items()} for t in targets]
+        targets = [{k: v.to(device) for k, v in t.items() if isinstance(v,torch.Tensor)} for t in targets]
 
         torch.cuda.synchronize()
         model_time = time.time()
