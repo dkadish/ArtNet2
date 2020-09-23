@@ -194,3 +194,13 @@ class VOCDetectionSubset(VOCDetection, WeightMixin):
 
     def filter_annotation_by_object_names(self, annotation):
         return list(filter(lambda o: o['name'] in self.names, annotation['annotation']['object']))
+
+class WeightedConcatDataset(torch.utils.data.ConcatDataset):
+
+    @property
+    def lengths(self):
+        return [len(d) for d in self.datasets]
+
+    @property
+    def weights(self):
+        return [1.0 - float(l)/float(len(self)) for l in self.lengths]
