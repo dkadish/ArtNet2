@@ -41,7 +41,6 @@ def plot_pr_curve_tensorboard(p50, p75, writer=None):
 
     for i, v in enumerate(data):
         d = dict(zip(pr_dict.keys(), v))
-        print(d, i)
         writer.add_scalars('pr_curve', d, i)
 
 
