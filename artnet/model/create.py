@@ -7,8 +7,10 @@ from torchvision.models.detection.rpn import AnchorGenerator
 
 
 def fasterrcnn_shape_resnet50(device, train_dataset_size, batch_size_train, num_epochs, trainable_layers,
-                              box_nms_thresh,
-                              num_classes):
+                              box_nms_thresh, num_classes):
+
+    #TODO Testing a new method for this in ArtNet2_peopleart_and_voc_training_with_SIN_backbone.ipynb. Wait for results.
+
     # url_resnet50_trained_on_SIN = 'https://bitbucket.org/robert_geirhos/texture-vs-shape-pretrained-models/raw/6f41d2e86fc60566f78de64ecff35cc61eb6436f/resnet50_train_60_epochs-c8e5653e.pth.tar'
     url_resnet50_trained_on_SIN_and_IN_then_finetuned_on_IN = 'https://bitbucket.org/robert_geirhos/texture-vs-shape-pretrained-models/raw/60b770e128fffcbd8562a3ab3546c1a735432d03/resnet50_finetune_60_epochs_lr_decay_after_30_start_resnet50_train_45_epochs_combined_IN_SF-ca06340c.pth.tar'
 
@@ -77,29 +79,17 @@ def fasterrcnn_shape_resnet50(device, train_dataset_size, batch_size_train, num_
     return model, optimizer
 
 
-def fasterrcnn_resnet101(device, train_dataset_size, batch_size_train, num_epochs, trainable_layers, box_nms_thresh,
-                         num_classes):
-    return fasterrcnn_resnetx('resnet101', device, train_dataset_size, batch_size_train, num_epochs, trainable_layers,
-                              box_nms_thresh,
-                              num_classes)
+def fasterrcnn_resnet101(device, trainable_layers, box_nms_thresh, num_classes):
+    return fasterrcnn_resnetx('resnet101', device, trainable_layers, box_nms_thresh, num_classes)
 
 
-def fasterrcnn_resnet50(device, train_dataset_size, batch_size_train, num_epochs, trainable_layers, box_nms_thresh,
-                        num_classes):
-    return fasterrcnn_resnetx('resnet50', device, train_dataset_size, batch_size_train, num_epochs, trainable_layers,
-                              box_nms_thresh, num_classes)
+def fasterrcnn_resnet50(device, trainable_layers, box_nms_thresh, num_classes):
+    return fasterrcnn_resnetx('resnet50', device, trainable_layers, box_nms_thresh, num_classes)
 
 
-def fasterrcnn_resnetx(backbone_name, device, train_dataset_size, batch_size_train, num_epochs, trainable_layers,
+def fasterrcnn_resnetx(backbone_name, device, trainable_layers,
                        box_nms_thresh,
                        num_classes):
-    # Parameters
-    learning_rate = 0.0001
-    weight_decay = 1e-5
-
-    number_of_iteration_per_epoch = int(train_dataset_size / batch_size_train)
-    total_number_of_iteration = num_epochs * number_of_iteration_per_epoch
-    learning_rate_step_size = 2 * number_of_iteration_per_epoch
 
     backbone = resnet_fpn_backbone(backbone_name, pretrained=True, trainable_layers=trainable_layers)
     model = FasterRCNN(backbone, num_classes=num_classes, box_nms_thresh=box_nms_thresh)
