@@ -6,8 +6,7 @@ from torchvision.models.detection.faster_rcnn import FasterRCNN
 from torchvision.models.detection.rpn import AnchorGenerator
 
 
-def fasterrcnn_shape_resnet50(device, train_dataset_size, batch_size_train, num_epochs, trainable_layers,
-                              box_nms_thresh, num_classes):
+def fasterrcnn_shape_resnet50(device, num_classes):
 
     #TODO Testing a new method for this in ArtNet2_peopleart_and_voc_training_with_SIN_backbone.ipynb. Wait for results.
 
@@ -76,7 +75,7 @@ def fasterrcnn_shape_resnet50(device, train_dataset_size, batch_size_train, num_
                                                    step_size=3,
                                                    gamma=0.5)
 
-    return model, optimizer
+    return model, optimizer, lr_scheduler
 
 
 def fasterrcnn_resnet101(device, trainable_layers, box_nms_thresh, num_classes):
@@ -103,4 +102,4 @@ def fasterrcnn_resnetx(backbone_name, device, trainable_layers,
                                                    step_size=3,
                                                    gamma=0.5)
 
-    return model, optimizer
+    return model, optimizer, lr_scheduler
