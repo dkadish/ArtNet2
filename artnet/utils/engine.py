@@ -27,7 +27,8 @@ def train_one_epoch(model: nn.Module, optimizer: Optimizer, data_loader, device,
 
     for images, targets in metric_logger.log_every(data_loader, print_freq, header):
         images = list(image.to(device) for image in images)
-        targets = [{k: v.to(device) for k, v in t.items()} for t in targets]
+        # targets = [{k: v.to(device) for k, v in t.items()} for t in targets]
+        targets = [{k: v.to(device) for k, v in t.items() if isinstance(v, torch.Tensor)} for t in targets]
 
         loss_dict = model(images, targets)
 
