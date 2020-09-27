@@ -7,12 +7,17 @@ import torchvision.models.detection.mask_rcnn
 from torch import nn
 from torch.optim import Optimizer
 
+import numpy as np
+
 from . import utils
 from .coco_eval import CocoEvaluator
 from .coco_utils import get_coco_api_from_dataset
+from .early_stopping import EarlyStopping
 
 
-def train_one_epoch(model: nn.Module, optimizer: Optimizer, data_loader, device, epoch, print_freq):
+def train_one_epoch(model: nn.Module, optimizer: Optimizer, data_loader, device, epoch, print_freq, writer=None):
+    running_loss = 0.0
+
     model.train()
     metric_logger = utils.MetricLogger(delimiter="  ")
     metric_logger.add_meter('lr', utils.SmoothedValue(window_size=1, fmt='{value:.6f}'))
@@ -52,66 +57,141 @@ def train_one_epoch(model: nn.Module, optimizer: Optimizer, data_loader, device,
         if lr_scheduler is not None:
             lr_scheduler.step()
 
+        # ...log the running loss
+        if writer is not None:
+            writer.add_scalar('training loss',
+                              losses.item() / 1000,
+                              epoch * len(data_loader) + i * print_freq)
+
         metric_logger.update(loss=losses_reduced, **loss_dict_reduced)
         metric_logger.update(lr=optimizer.param_groups[0]["lr"])
 
     return metric_logger
 
 
-def train_one_epoch_tb_logs(model: nn.Module, optimizer: Optimizer, data_loader, device, epoch, writer):
-    running_loss = 0.0
+def train_with_early_stopping(model: nn.Module, optimizer: Optimizer, data_loader_training, data_loader_validation, device, epochs,
+                              print_freq, writer=None):
 
-    model.train()
+    # to track the training loss as the model trains
+    train_losses = []
+    # to track the validation loss as the model trains
+    valid_losses = []
+    # to track the average training loss per epoch as the model trains
+    avg_train_losses = []
+    # to track the average validation loss per epoch as the model trains
+    avg_valid_losses = []
 
-    # TODO This ignores the learning rate scheduling that is already assigned. Do I remove?
-    lr_scheduler = None
-    if epoch == 0:
-        warmup_factor = 1. / 1000
-        warmup_iters = min(1000, len(data_loader) - 1)
+    early_stopping = EarlyStopping()
+
+
+    for epoch in range(epochs):
+
+        metric_logger = utils.MetricLogger(delimiter="  ")
+        metric_logger.add_meter('lr', utils.SmoothedValue(window_size=1, fmt='{value:.6f}'))
+        header = 'Epoch: [{}]'.format(epoch)
+
+        #FIXME Code duplication below
+
+        ### Train
+        model.train()
+
+        lr_scheduler = None
+        if epoch == 0:
+            warmup_factor = 1. / 1000
+        warmup_iters = min(1000, len(data_loader_training) - 1)
 
         lr_scheduler = utils.warmup_lr_scheduler(optimizer, warmup_iters, warmup_factor)
 
-    for i, (images, targets) in enumerate(data_loader):
+        for i, (images, targets) in enumerate(metric_logger.log_every(data_loader_training, print_freq, header)):
+            images = list(image.to(device) for image in images)
+            # targets = [{k: v.to(device) for k, v in t.items()} for t in targets]
+            targets = [{k: v.to(device) for k, v in t.items() if isinstance(v, torch.Tensor)} for t in targets]
 
-        images = list(image.to(device) for image in images)
-        targets = [{k: v.to(device) for k, v in t.items() if isinstance(v, torch.Tensor)} for t in targets]
+            loss_dict = model(images, targets)
 
-        loss_dict = model(images, targets)
+            losses = sum(loss for loss in loss_dict.values())
 
-        losses = sum(loss for loss in loss_dict.values())
+            # reduce losses over all GPUs for logging purposes
+            loss_dict_reduced = utils.reduce_dict(loss_dict)
+            losses_reduced = sum(loss for loss in loss_dict_reduced.values())
 
-        # reduce losses over all GPUs for logging purposes
-        loss_dict_reduced = utils.reduce_dict(loss_dict)
-        losses_reduced = sum(loss for loss in loss_dict_reduced.values())
+            loss_value = losses_reduced.item()
 
-        loss_value = losses_reduced.item()
+            if not math.isfinite(loss_value):
+                print("Loss is {}, stopping training".format(loss_value))
+                print(loss_dict_reduced)
+                sys.exit(1)
 
-        if not math.isfinite(loss_value):
-            print("Loss is {}, stopping training".format(loss_value))
-            print(loss_dict_reduced)
-            sys.exit(1)
+            optimizer.zero_grad()
+            losses.backward()
+            optimizer.step()
 
-        optimizer.zero_grad()
-        losses.backward()
-        optimizer.step()
-
-        if lr_scheduler is not None:
-            lr_scheduler.step()
-
-        running_loss += losses.item()
-        if i % 100 == 99:  # every 1000 mini-batches...
+            if lr_scheduler is not None:
+                lr_scheduler.step()
 
             # ...log the running loss
             writer.add_scalar('training loss',
-                              running_loss / 1000,
-                              epoch * len(data_loader) + i)
+                              losses.item() / 1000,
+                              epoch * len(data_loader_training) + i * print_freq)
 
-            # ...log a Matplotlib Figure showing the model's predictions on a
-            # random mini-batch
-            # writer.add_figure('predictions vs. actuals',
-            #                   plot_classes_preds(net, inputs, labels),
-            #                   global_step=epoch * len(data_loader) + i)
-            running_loss = 0.0
+            metric_logger.update(loss=losses_reduced, **loss_dict_reduced)
+            metric_logger.update(lr=optimizer.param_groups[0]["lr"])
+
+            train_losses.append(loss_value)
+
+        ## Validate
+        with torch.no_grad():
+
+            # lr_scheduler = None
+            # if epoch == 0:
+            #     warmup_factor = 1. / 1000
+            # warmup_iters = min(1000, len(data_loader) - 1)
+
+            # lr_scheduler = utils.warmup_lr_scheduler(optimizer, warmup_iters, warmup_factor)
+
+            for i, (images, targets) in enumerate(metric_logger.log_every(data_loader_validation, print_freq, header)):
+                images = list(image.to(device) for image in images)
+                targets = [{k: v.to(device) for k, v in t.items() if isinstance(v, torch.Tensor)} for t in targets]
+
+                loss_dict = model(images, targets)
+
+                losses = sum(loss for loss in loss_dict.values())
+
+                # reduce losses over all GPUs for logging purposes
+                loss_dict_reduced = utils.reduce_dict(loss_dict)
+                losses_reduced = sum(loss for loss in loss_dict_reduced.values())
+
+                loss_value = losses_reduced.item()
+
+                # ...log the running loss
+                writer.add_scalar('validation loss',
+                                  losses.item() / 1000,
+                                  epoch * len(data_loader_validation) + i * print_freq)
+
+                metric_logger.update(loss=losses_reduced, **loss_dict_reduced)
+                metric_logger.update(lr=optimizer.param_groups[0]["lr"])
+
+                valid_losses.append(loss_value)
+
+        train_loss = np.average(train_losses)
+        valid_loss = np.average(valid_losses)
+        avg_train_losses.append(train_loss)
+        avg_valid_losses.append(valid_loss)
+
+        print('[{}/{}] train_loss: {:.5f} valid_loss: {:.5f}'.format(epoch, epochs, train_loss, valid_loss))
+
+        train_losses = []
+        valid_losses = []
+
+        early_stopping(valid_loss, model)
+
+        if early_stopping.early_stop:
+            print('Early stopping after epoch {}'.format(epoch))
+            break
+
+    model.load_state_dict(torch.load('checkpoint.pt'))
+
+    return model, avg_train_losses, avg_valid_losses
 
 
 def _get_iou_types(model):
@@ -142,7 +222,7 @@ def evaluate(model, data_loader, device):
 
     for images, targets in metric_logger.log_every(data_loader, 100, header):
         images = list(img.to(device) for img in images)
-        targets = [{k: v.to(device) for k, v in t.items() if isinstance(v,torch.Tensor)} for t in targets]
+        targets = [{k: v.to(device) for k, v in t.items() if isinstance(v, torch.Tensor)} for t in targets]
 
         torch.cuda.synchronize()
         model_time = time.time()

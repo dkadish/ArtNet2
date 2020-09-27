@@ -5,6 +5,7 @@ from typing import Callable, Optional, Sized
 import torch
 import torch.utils.data
 from PIL import Image
+from torch.utils.data.dataset import random_split, ConcatDataset
 from torchvision.datasets import VisionDataset, VOCDetection
 
 
@@ -51,6 +52,7 @@ class WeightMixin(Sized):
             else:
                 self._negative.append(i)
 
+
 class ArtNetDataset(VisionDataset, WeightMixin):
 
     def __init__(self,
@@ -60,7 +62,7 @@ class ArtNetDataset(VisionDataset, WeightMixin):
                  target_transform: Optional[Callable] = None, source='artnet',
                  image_set=None) -> None:
         VisionDataset.__init__(self, root, transform=transform, transforms=transforms,
-                         target_transform=target_transform)
+                               target_transform=target_transform)
         WeightMixin.__init__(self)
 
         # load all image files, sorting them to
@@ -76,7 +78,6 @@ class ArtNetDataset(VisionDataset, WeightMixin):
                 file_names = [x.strip() for x in f.readlines()]
 
             self.imgs = [(self._root / 'JPEGImages' / x).with_suffix('.jpg') for x in file_names]
-
 
     def __getitem__(self, idx):
         # Handle slices
@@ -146,6 +147,7 @@ class ArtNetDataset(VisionDataset, WeightMixin):
     def _root(self):
         return Path(self.root)
 
+
 class VOCDetectionSubset(VOCDetection, WeightMixin):
 
     def __init__(self, root, year='2012', image_set='train', download=False, transform=None, target_transform=None,
@@ -195,6 +197,7 @@ class VOCDetectionSubset(VOCDetection, WeightMixin):
     def filter_annotation_by_object_names(self, annotation):
         return list(filter(lambda o: o['name'] in self.names, annotation['annotation']['object']))
 
+
 class WeightedConcatDataset(torch.utils.data.ConcatDataset):
 
     @property
@@ -203,4 +206,41 @@ class WeightedConcatDataset(torch.utils.data.ConcatDataset):
 
     @property
     def weights(self):
-        return [1.0 - float(l)/float(len(self)) for l in self.lengths]
+        return [float(len(self)) / float(l) for l in self.lengths]
+
+    @property
+    def weight_list(self):
+        w = []
+        for i, d in enumerate(self.datasets):
+            for _ in range(len(d)):
+                w.append(self.weights[i])
+
+        return w
+
+
+def split_posneg_trainval(datasets: dict, train_fraction=0.7, include_negative=True, use: list=None):
+
+    if use is not None:
+        datasets = {k: datasets[k] for k in use}
+
+    datasets_pos = {}
+    datasets_neg = {}
+    datasets_train = {}
+    datasets_validate = {}
+
+    for ds in datasets:
+        datasets_pos[ds] = torch.utils.data.Subset(datasets[ds], datasets[ds].positive)
+        datasets_neg[ds] = torch.utils.data.Subset(datasets[ds], datasets[ds].negative)
+
+        ds_names, ds_pns = ['{}+', '{}-'], [datasets_pos, datasets_neg]
+        if not include_negative:
+            ds_names, ds_pns = ['{}+', ], [datasets_pos, ]
+
+        for ds_name, ds_pn in zip(ds_names, ds_pns):
+            n_train = int(len(ds_pn[ds]) * train_fraction)
+            n_validate = len(ds_pn[ds]) - n_train
+            datasets_train[ds_name.format(ds)], datasets_validate[ds_name.format(ds)] = random_split(ds_pn[ds],
+                                                                                                     [n_train,
+                                                                                                   n_validate])
+
+    return datasets_train, datasets_validate
