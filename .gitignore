@@ -296,6 +296,7 @@ notebooks/PennFudanPed/
 
 notebooks/vision/
 
-data/ArtNet/
+data/*
+models/*
 
 *.tar.xz
