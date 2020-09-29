@@ -30,6 +30,7 @@ def train_one_epoch(model: nn.Module, optimizer: Optimizer, data_loader, device,
 
         lr_scheduler = utils.warmup_lr_scheduler(optimizer, warmup_iters, warmup_factor)
 
+    i = 0
     for images, targets in metric_logger.log_every(data_loader, print_freq, header):
         images = list(image.to(device) for image in images)
         # targets = [{k: v.to(device) for k, v in t.items()} for t in targets]
@@ -65,6 +66,8 @@ def train_one_epoch(model: nn.Module, optimizer: Optimizer, data_loader, device,
 
         metric_logger.update(loss=losses_reduced, **loss_dict_reduced)
         metric_logger.update(lr=optimizer.param_groups[0]["lr"])
+
+        i+=1
 
     return metric_logger
 
