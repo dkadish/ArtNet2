@@ -17,8 +17,10 @@ def safe_collate(batch):
     return utils.collate_fn(batch)
 
 
-def draw_boxes(im, boxes, labels, color=(150, 0, 0)):
-    img = Image.fromarray(im.mul(255).permute(1, 2, 0).byte().numpy())
+def draw_boxes(im: Image, boxes, labels, color=(150, 0, 0)) -> Image:
+    # im_torch = torch.tensor(im)
+    # img = Image.fromarray(im_torch.mul(255).permute(1, 2, 0).byte().numpy())
+    img = im
     draw = ImageDraw.Draw(img)
     for box, draw_label in zip(boxes, labels):
         draw_box = box.astype('int')
@@ -26,13 +28,13 @@ def draw_boxes(im, boxes, labels, color=(150, 0, 0)):
         bottom_corner = (draw_box.reshape((2, 2)).max(dim=0).values - torch.tensor([40, 10])).tolist()
         draw.text(bottom_corner, str(draw_label))
 
-    return im
+    return img
 
 
 def draw_debug_images(images, targets, predictions=None, score_thr=0.3):
     debug_images = []
     for image, target in zip(images, targets):
-        img = draw_boxes(np.array(F.to_pil_image(image.cpu())),
+        img = draw_boxes(F.to_pil_image(image.cpu()),
                          [box.cpu().numpy() for box in target['boxes']],
                          [label.item() for label in target['labels']])
         if predictions:
@@ -44,7 +46,7 @@ def draw_debug_images(images, targets, predictions=None, score_thr=0.3):
                               zip(predictions[target['image_id'].item()]['labels'],
                                   predictions[target['image_id'].item()]['scores']) if score >= score_thr],
                              color=(0, 150, 0))
-        debug_images.append(img)
+        debug_images.append(np.array(img))
     return debug_images
 
 

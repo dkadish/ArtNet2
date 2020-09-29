@@ -113,9 +113,9 @@ def run(batch_size=4, detection_thresh=0.4, log_interval=100, debug_images_inter
                                                                             path_to_json))
 
             if ((i + 1) / batch_size) % debug_images_interval == 0:
-                debug_image = draw_boxes(np.array(F.to_pil_image(image.cpu())), img_boxes, img_labels,
+                debug_image = draw_boxes(F.to_pil_image(image.cpu()), img_boxes, img_labels,
                                          color=(0, 150, 0))
-                writer.add_image("inference/image_{}".format(img_num), debug_image, ((i + 1) / batch_size),
+                writer.add_image("inference/image_{}".format(img_num), np.array(debug_image), ((i + 1) / batch_size),
                                  dataformats='HWC')
 
         batch_images = []
