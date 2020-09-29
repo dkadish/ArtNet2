@@ -23,7 +23,7 @@ from ..utils.coco_utils import convert_to_coco_api
 # task = Task.init(project_name='Object Detection with TRAINS, Ignite and TensorBoard',
 #                  task_name='Train MaskRCNN with torchvision')
 
-# configuration_data = {'image_size': 512, 'mask_predictor_hidden_layer': 256}
+configuration_data = {'image_size': 512, 'mask_predictor_hidden_layer': 256}
 # configuration_data = task.connect_configuration(configuration_data)
 
 
