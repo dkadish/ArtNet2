@@ -25,7 +25,7 @@ def draw_boxes(im: Image, boxes, labels, color=(150, 0, 0)) -> Image:
     for box, draw_label in zip(boxes, labels):
         draw_box = box.astype('int')
         draw.rectangle(draw_box.tolist(), outline=(255, 0, 0), width=4)
-        bottom_corner = (draw_box.reshape((2, 2)).max(dim=0).values - torch.tensor([40, 10])).tolist()
+        bottom_corner = (box.reshape((2, 2)).max(axis=0) - np.array([40, 10])).tolist()
         draw.text(bottom_corner, str(draw_label))
 
     return img
