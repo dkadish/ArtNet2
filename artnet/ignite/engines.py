@@ -64,4 +64,15 @@ def prepare_batch(batch, device=None):
     images, targets = batch
     images = list(image.to(device, non_blocking=True) for image in images)
     targets = [{k: v.to(device, non_blocking=True) for k, v in t.items()} for t in targets]
+
+    # Remove degenerate targets
+    for target_idx, target in enumerate(targets):
+        boxes = target["boxes"]
+        degenerate_boxes = boxes[:, 2:] <= boxes[:, :2]
+        if degenerate_boxes.any():
+            to_remove = degenerate_boxes.any(dim=1).nonzero().view(-1)
+            to_keep = set(range(len(boxes))) - set(to_remove.tolist())
+            boxes = boxes[list(to_keep)]
+            target["boxes"] = boxes
+
     return images, targets
