@@ -84,8 +84,8 @@ def get_data_loaders(train_ann_file, test_ann_file, batch_size, test_size, image
 
     print('Training set has {} samples. {} for valication and {} for testing'.format(len(dataset), len(dataset_val), len(dataset_test)))
 
-    rs = RandomSampler(dataset, num_samples=5000)
-    rs_val = RandomSampler(dataset_val, num_samples=2000)
+    rs = RandomSampler(dataset, replacement=True, num_samples=5000)
+    rs_val = RandomSampler(dataset_val, replacement=True, num_samples=2000)
 
     # set train and validation data-loaders
     train_loader = DataLoader(dataset, batch_size=batch_size, sampler=rs,# shuffle=True,
