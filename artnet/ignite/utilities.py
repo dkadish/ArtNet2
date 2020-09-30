@@ -6,11 +6,11 @@ import torch
 import torchvision
 from PIL import ImageDraw, Image
 from torchvision.models.detection import FasterRCNN
+from torchvision.models.detection.backbone_utils import resnet_fpn_backbone
 from torchvision.models.detection.faster_rcnn import FastRCNNPredictor
 from torchvision.models.detection.mask_rcnn import MaskRCNNPredictor
 from torchvision.transforms import functional as F
 
-from notebooks.vision.torchvision.models.detection.backbone_utils import resnet_fpn_backbone
 from ..utils import utils
 
 
