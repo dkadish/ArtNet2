@@ -8,7 +8,7 @@ import numpy as np
 import torch
 from PIL import Image
 from ignite.engine import Events
-from torch.utils.data import DataLoader
+from torch.utils.data import DataLoader, RandomSampler
 from torch.utils.tensorboard import SummaryWriter
 from torchvision.datasets.coco import CocoDetection
 
@@ -82,11 +82,16 @@ def get_data_loaders(train_ann_file, test_ann_file, batch_size, test_size, image
     indices_val = torch.randperm(len(dataset_test)).tolist()
     dataset_val = torch.utils.data.Subset(dataset_test, indices_val[:test_size])
 
+    print('Training set has {} samples. {} for valication and {} for testing'.format(len(dataset), len(dataset_val), len(dataset_test)))
+
+    rs = RandomSampler(dataset, num_samples=5000)
+    rs_val = RandomSampler(dataset_val, num_samples=2000)
+
     # set train and validation data-loaders
-    train_loader = DataLoader(dataset, batch_size=batch_size, shuffle=True, num_workers=6,
-                              collate_fn=safe_collate, pin_memory=True)
-    val_loader = DataLoader(dataset_val, batch_size=batch_size, shuffle=False, num_workers=6,
-                            collate_fn=safe_collate, pin_memory=True)
+    train_loader = DataLoader(dataset, batch_size=batch_size, sampler=rs,# shuffle=True,
+                              num_workers=6, collate_fn=safe_collate, pin_memory=True)
+    val_loader = DataLoader(dataset_val, batch_size=batch_size, sampler=rs_val,# shuffle=False,
+                            num_workers=6, collate_fn=safe_collate, pin_memory=True)
 
     return train_loader, val_loader, labels_enumeration
 
