@@ -5,10 +5,12 @@ import numpy as np
 import torch
 import torchvision
 from PIL import ImageDraw, Image
+from torchvision.models.detection import FasterRCNN
 from torchvision.models.detection.faster_rcnn import FastRCNNPredictor
 from torchvision.models.detection.mask_rcnn import MaskRCNNPredictor
 from torchvision.transforms import functional as F
 
+from notebooks.vision.torchvision.models.detection.backbone_utils import resnet_fpn_backbone
 from ..utils import utils
 
 
@@ -73,6 +75,10 @@ def get_model_instance_segmentation(num_classes, hidden_layer):
     model.roi_heads.mask_predictor = MaskRCNNPredictor(in_features_mask, hidden_layer, num_classes)
     return model
 
+def get_model_instance_detection(num_classes, box_nms_thresh=0.5, trainable_layers=3):
+    backbone = resnet_fpn_backbone('resnet101', pretrained=True, trainable_layers=trainable_layers)
+    model = FasterRCNN(backbone, num_classes=num_classes, box_nms_thresh=box_nms_thresh)
+    return model
 
 def get_iou_types(model):
     model_without_ddp = model

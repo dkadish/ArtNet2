@@ -14,7 +14,8 @@ from torchvision.datasets.coco import CocoDetection
 
 from .engines import create_trainer, create_evaluator
 from .transforms import get_transform
-from .utilities import draw_debug_images, draw_mask, get_model_instance_segmentation, safe_collate, get_iou_types
+from .utilities import draw_debug_images, draw_mask, get_model_instance_segmentation, safe_collate, get_iou_types, \
+    get_model_instance_detection
 from ..utils import utils
 from ..utils.coco_eval import CocoEvaluator
 from ..utils.coco_utils import convert_to_coco_api
@@ -65,16 +66,16 @@ class CocoMask(CocoDetection):
 
 def get_data_loaders(train_ann_file, test_ann_file, batch_size, test_size, image_size, use_mask):
     # first, crate PyTorch dataset objects, for the train and validation data.
-    dataset = CocoMask(
+    dataset = CocoDetection(
         root=Path.joinpath(Path(train_ann_file).parent.parent, train_ann_file.split('_')[1].split('.')[0]),
         annFile=train_ann_file,
-        transforms=get_transform(train=True, image_size=image_size),
-        use_mask=use_mask)
-    dataset_test = CocoMask(
+        transforms=get_transform(train=True, image_size=image_size))#,
+        # use_mask=use_mask)
+    dataset_test = CocoDetection(
         root=Path.joinpath(Path(test_ann_file).parent.parent, test_ann_file.split('_')[1].split('.')[0]),
         annFile=test_ann_file,
-        transforms=get_transform(train=False, image_size=image_size),
-        use_mask=use_mask)
+        transforms=get_transform(train=False, image_size=image_size))#,
+        # use_mask=use_mask)
 
     labels_enumeration = dataset.coco.cats
 
@@ -89,113 +90,122 @@ def get_data_loaders(train_ann_file, test_ann_file, batch_size, test_size, image
 
     return train_loader, val_loader, labels_enumeration
 
-def train(model, device, optimizer, scheduler, train_loader, writer, input_checkpoint=None):
-    # define Ignite's train and evaluation engine
-    trainer = create_trainer(model, device)
-    evaluator = create_evaluator(model, device)
-
-    @trainer.on(Events.STARTED)
-    def on_training_started(engine):
-        # construct an optimizer
-        params = [p for p in model.parameters() if p.requires_grad]
-        # engine.state.optimizer = torch.optim.SGD(params,
-        #                                          lr=lr,
-        #                                          momentum=momentum,
-        #                                          weight_decay=weight_decay)
-        engine.state.optimizer = optimizer
-        # engine.state.scheduler = torch.optim.lr_scheduler.StepLR(engine.state.optimizer, step_size=3, gamma=0.1)
-        engine.state.scheduler = scheduler
-        if input_checkpoint and load_optimizer:
-            engine.state.optimizer.load_state_dict(input_checkpoint['optimizer'])
-            engine.state.scheduler.load_state_dict(input_checkpoint['lr_scheduler'])
-
-    @trainer.on(Events.EPOCH_STARTED)
-    def on_epoch_started(engine):
-        model.train()
-        engine.state.warmup_scheduler = None
-        if engine.state.epoch == 1:
-            warmup_iters = min(warmup_iterations, len(train_loader) - 1)
-            print('Warm up period was set to {} iterations'.format(warmup_iters))
-            warmup_factor = 1. / warmup_iters
-            engine.state.warmup_scheduler = utils.warmup_lr_scheduler(engine.state.optimizer, warmup_iters,
-                                                                      warmup_factor)
-
-    @trainer.on(Events.ITERATION_COMPLETED)
-    def on_iteration_completed(engine):
-        images, targets, loss_dict_reduced = engine.state.output
-        if engine.state.iteration % log_interval == 0:
-            loss = sum(loss for loss in loss_dict_reduced.values()).item()
-            print("Epoch: {}, Iteration: {}, Loss: {}".format(engine.state.epoch, engine.state.iteration, loss))
-            for k, v in loss_dict_reduced.items():
-                writer.add_scalar("loss/{}".format(k), v.item(), engine.state.iteration)
-            writer.add_scalar("loss/total_loss", sum(loss for loss in loss_dict_reduced.values()).item(),
-                              engine.state.iteration)
-            writer.add_scalar("learning rate/lr", engine.state.optimizer.param_groups[0]['lr'], engine.state.iteration)
-
-        if engine.state.iteration % debug_images_interval == 0:
-            for n, debug_image in enumerate(draw_debug_images(images, targets)):
-                writer.add_image("training/image_{}".format(n), debug_image, engine.state.iteration, dataformats='HWC')
-                if 'masks' in targets[n]:
-                    writer.add_image("training/image_{}_mask".format(n),
-                                     draw_mask(targets[n]), engine.state.iteration, dataformats='HW')
-        images = targets = loss_dict_reduced = engine.state.output = None
-
-    @trainer.on(Events.EPOCH_COMPLETED)
-    def on_epoch_completed(engine):
-        engine.state.scheduler.step()
-        evaluator.run(val_loader)
-        for res_type in evaluator.state.coco_evaluator.iou_types:
-            average_precision_05 = evaluator.state.coco_evaluator.coco_eval[res_type].stats[1]
-            writer.add_scalar("validation-{}/average precision 0_5".format(res_type), average_precision_05,
-                              engine.state.iteration)
-        checkpoint_path = os.path.join(output_dir, 'model_epoch_{}.pth'.format(engine.state.epoch))
-        print('Saving model checkpoint')
-        checkpoint = {
-            'model': model.state_dict(),
-            'optimizer': engine.state.optimizer.state_dict(),
-            'lr_scheduler': engine.state.scheduler.state_dict(),
-            'epoch': engine.state.epoch,
-            'configuration': configuration_data,
-            'labels_enumeration': labels_enum}
-        utils.save_on_master(checkpoint, checkpoint_path)
-        print('Model checkpoint from epoch {} was saved at {}'.format(engine.state.epoch, checkpoint_path))
-        evaluator.state = checkpoint = None
-
-    @evaluator.on(Events.STARTED)
-    def on_evaluation_started(engine):
-        model.eval()
-        engine.state.coco_evaluator = CocoEvaluator(coco_api_val_dataset, iou_types)
-
-    @evaluator.on(Events.ITERATION_COMPLETED)
-    def on_eval_iteration_completed(engine):
-        images, targets, results = engine.state.output
-        if engine.state.iteration % log_interval == 0:
-            print("Evaluation: Iteration: {}".format(engine.state.iteration))
-
-        if engine.state.iteration % debug_images_interval == 0:
-            for n, debug_image in enumerate(draw_debug_images(images, targets, results)):
-                writer.add_image("evaluation/image_{}_{}".format(engine.state.iteration, n),
-                                 debug_image, trainer.state.iteration, dataformats='HWC')
-                if 'masks' in targets[n]:
-                    writer.add_image("evaluation/image_{}_{}_mask".format(engine.state.iteration, n),
-                                     draw_mask(targets[n]), trainer.state.iteration, dataformats='HW')
-                    curr_image_id = int(targets[n]['image_id'])
-                    writer.add_image("evaluation/image_{}_{}_predicted_mask".format(engine.state.iteration, n),
-                                     draw_mask(results[curr_image_id]).squeeze(), trainer.state.iteration,
-                                     dataformats='HW')
-        images = targets = results = engine.state.output = None
-
-    @evaluator.on(Events.COMPLETED)
-    def on_evaluation_completed(engine):
-        # gather the stats from all processes
-        engine.state.coco_evaluator.synchronize_between_processes()
-
-        # accumulate predictions from all images
-        engine.state.coco_evaluator.accumulate()
-        engine.state.coco_evaluator.summarize()
-
-    trainer.run(train_loader, max_epochs=epochs)
-    writer.close()
+# def train(model, device, optimizer, scheduler, train_loader, val_loader, writer, input_checkpoint=None,
+#           warmup_iterations=5000, epochs=10, log_interval=100, debug_images_interval=500,
+#           load_optimizer=False, output_dir="/tmp/checkpoints"
+#           ):
+#     # Define parameters
+#     # batch_size = 4, test_size = 2000, train_dataset_ann_file='~/bigdata/coco/annotations/instances_train2017.json',
+#     #       val_dataset_ann_file='~/bigdata/coco/annotations/instances_val2017.json', log_dir="/tmp/tensorboard_logs",
+#     #       lr=0.005, momentum=0.9, weight_decay=0.0005
+#
+#
+#     # define Ignite's train and evaluation engine
+#     trainer = create_trainer(model, device)
+#     evaluator = create_evaluator(model, device)
+#
+#     @trainer.on(Events.STARTED)
+#     def on_training_started(engine):
+#         # construct an optimizer
+#         params = [p for p in model.parameters() if p.requires_grad]
+#         # engine.state.optimizer = torch.optim.SGD(params,
+#         #                                          lr=lr,
+#         #                                          momentum=momentum,
+#         #                                          weight_decay=weight_decay)
+#         engine.state.optimizer = optimizer
+#         # engine.state.scheduler = torch.optim.lr_scheduler.StepLR(engine.state.optimizer, step_size=3, gamma=0.1)
+#         engine.state.scheduler = scheduler
+#         if input_checkpoint is not None and load_optimizer:
+#             engine.state.optimizer.load_state_dict(input_checkpoint['optimizer'])
+#             engine.state.scheduler.load_state_dict(input_checkpoint['lr_scheduler'])
+#
+#     @trainer.on(Events.EPOCH_STARTED)
+#     def on_epoch_started(engine):
+#         model.train()
+#         engine.state.warmup_scheduler = None
+#         if engine.state.epoch == 1:
+#             warmup_iters = min(warmup_iterations, len(train_loader) - 1)
+#             print('Warm up period was set to {} iterations'.format(warmup_iters))
+#             warmup_factor = 1. / warmup_iters
+#             engine.state.warmup_scheduler = utils.warmup_lr_scheduler(engine.state.optimizer, warmup_iters,
+#                                                                       warmup_factor)
+#
+#     @trainer.on(Events.ITERATION_COMPLETED)
+#     def on_iteration_completed(engine):
+#         images, targets, loss_dict_reduced = engine.state.output
+#         if engine.state.iteration % log_interval == 0:
+#             loss = sum(loss for loss in loss_dict_reduced.values()).item()
+#             print("Epoch: {}, Iteration: {}, Loss: {}".format(engine.state.epoch, engine.state.iteration, loss))
+#             for k, v in loss_dict_reduced.items():
+#                 writer.add_scalar("loss/{}".format(k), v.item(), engine.state.iteration)
+#             writer.add_scalar("loss/total_loss", sum(loss for loss in loss_dict_reduced.values()).item(),
+#                               engine.state.iteration)
+#             writer.add_scalar("learning rate/lr", engine.state.optimizer.param_groups[0]['lr'], engine.state.iteration)
+#
+#         if engine.state.iteration % debug_images_interval == 0:
+#             for n, debug_image in enumerate(draw_debug_images(images, targets)):
+#                 writer.add_image("training/image_{}".format(n), debug_image, engine.state.iteration, dataformats='HWC')
+#                 if 'masks' in targets[n]:
+#                     writer.add_image("training/image_{}_mask".format(n),
+#                                      draw_mask(targets[n]), engine.state.iteration, dataformats='HW')
+#         images = targets = loss_dict_reduced = engine.state.output = None
+#
+#     @trainer.on(Events.EPOCH_COMPLETED)
+#     def on_epoch_completed(engine):
+#         engine.state.scheduler.step()
+#         evaluator.run(val_loader)
+#         for res_type in evaluator.state.coco_evaluator.iou_types:
+#             average_precision_05 = evaluator.state.coco_evaluator.coco_eval[res_type].stats[1]
+#             writer.add_scalar("validation-{}/average precision 0_5".format(res_type), average_precision_05,
+#                               engine.state.iteration)
+#         checkpoint_path = os.path.join(output_dir, 'model_epoch_{}.pth'.format(engine.state.epoch))
+#         print('Saving model checkpoint')
+#         checkpoint = {
+#             'model': model.state_dict(),
+#             'optimizer': engine.state.optimizer.state_dict(),
+#             'lr_scheduler': engine.state.scheduler.state_dict(),
+#             'epoch': engine.state.epoch,
+#             'configuration': configuration_data,
+#             'labels_enumeration': labels_enum}
+#         utils.save_on_master(checkpoint, checkpoint_path)
+#         print('Model checkpoint from epoch {} was saved at {}'.format(engine.state.epoch, checkpoint_path))
+#         evaluator.state = checkpoint = None
+#
+#     @evaluator.on(Events.STARTED)
+#     def on_evaluation_started(engine):
+#         model.eval()
+#         engine.state.coco_evaluator = CocoEvaluator(coco_api_val_dataset, iou_types)
+#
+#     @evaluator.on(Events.ITERATION_COMPLETED)
+#     def on_eval_iteration_completed(engine):
+#         images, targets, results = engine.state.output
+#         if engine.state.iteration % log_interval == 0:
+#             print("Evaluation: Iteration: {}".format(engine.state.iteration))
+#
+#         if engine.state.iteration % debug_images_interval == 0:
+#             for n, debug_image in enumerate(draw_debug_images(images, targets, results)):
+#                 writer.add_image("evaluation/image_{}_{}".format(engine.state.iteration, n),
+#                                  debug_image, trainer.state.iteration, dataformats='HWC')
+#                 if 'masks' in targets[n]:
+#                     writer.add_image("evaluation/image_{}_{}_mask".format(engine.state.iteration, n),
+#                                      draw_mask(targets[n]), trainer.state.iteration, dataformats='HW')
+#                     curr_image_id = int(targets[n]['image_id'])
+#                     writer.add_image("evaluation/image_{}_{}_predicted_mask".format(engine.state.iteration, n),
+#                                      draw_mask(results[curr_image_id]).squeeze(), trainer.state.iteration,
+#                                      dataformats='HW')
+#         images = targets = results = engine.state.output = None
+#
+#     @evaluator.on(Events.COMPLETED)
+#     def on_evaluation_completed(engine):
+#         # gather the stats from all processes
+#         engine.state.coco_evaluator.synchronize_between_processes()
+#
+#         # accumulate predictions from all images
+#         engine.state.coco_evaluator.accumulate()
+#         engine.state.coco_evaluator.summarize()
+#
+#     trainer.run(train_loader, max_epochs=epochs)
+#     writer.close()
 
 def run(warmup_iterations=5000, batch_size=4, test_size=2000, epochs=10, log_interval=100, debug_images_interval=500,
         train_dataset_ann_file='~/bigdata/coco/annotations/instances_train2017.json',
@@ -218,7 +228,8 @@ def run(warmup_iterations=5000, batch_size=4, test_size=2000, epochs=10, log_int
     device = torch.cuda.current_device() if torch.cuda.is_available() else torch.device('cpu')
     torch.backends.cudnn.benchmark = True if torch.cuda.is_available() else False  # optimization for fixed input size
 
-    model = get_model_instance_segmentation(num_classes, configuration_data.get('mask_predictor_hidden_layer'))
+    # model = get_model_instance_segmentation(num_classes, configuration_data.get('mask_predictor_hidden_layer'))
+    model = get_model_instance_detection(num_classes)
     iou_types = get_iou_types(model)
 
     # if there is more than one GPU, parallelize the model

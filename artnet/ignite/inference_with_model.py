@@ -10,7 +10,8 @@ from torch.utils.tensorboard import SummaryWriter
 from torchvision.transforms import functional as F
 
 from .transforms import get_transform
-from .utilities import get_iou_types, draw_boxes, get_model_instance_segmentation, CocoLikeAnnotations
+from .utilities import get_iou_types, draw_boxes, get_model_instance_segmentation, CocoLikeAnnotations, \
+    get_model_instance_detection
 from ..utils import utils
 
 
@@ -41,8 +42,9 @@ def run(batch_size=4, detection_thresh=0.4, log_interval=100, debug_images_inter
     device = torch.cuda.current_device() if torch.cuda.is_available() else torch.device('cpu')
     torch.backends.cudnn.benchmark = True if torch.cuda.is_available() else False  # optimization for fixed input size
 
-    model = get_model_instance_segmentation(model_configuration.get('num_classes'),
-                                            model_configuration.get('mask_predictor_hidden_layer'))
+    # model = get_model_instance_segmentation(model_configuration.get('num_classes'),
+    #                                         model_configuration.get('mask_predictor_hidden_layer'))
+    model = get_model_instance_detection(model_configuration.get('num_classes'))
 
     # if there is more than one GPU, parallelize the model
     if torch.cuda.device_count() > 1:
@@ -54,7 +56,7 @@ def run(batch_size=4, detection_thresh=0.4, log_interval=100, debug_images_inter
 
     # Define train and test datasets
     iou_types = get_iou_types(model)
-    use_mask = True if "segm" in iou_types else False
+    # use_mask = True if "segm" in iou_types else False
 
     # Load pretrained model weights
     model.load_state_dict(model_weights)
