@@ -60,10 +60,10 @@ def create_evaluator(model, device):
     return Engine(update_model)
 
 
-def prepare_batch(batch, device=None):
+def prepare_batch(batch, device=None, non_blocking=True):
     images, targets = batch
-    images = list(image.to(device, non_blocking=True) for image in images)
-    targets = [{k: v.to(device, non_blocking=True) for k, v in t.items()} for t in targets]
+    images = list(image.to(device, non_blocking=non_blocking) for image in images)
+    targets = [{k: v.to(device, non_blocking=non_blocking) for k, v in t.items()} for t in targets]
 
     # Remove degenerate targets
     for target_idx, target in enumerate(targets):
