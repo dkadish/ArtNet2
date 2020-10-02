@@ -5,7 +5,7 @@ from typing import Callable, Optional, Sized
 import torch
 import torch.utils.data
 from PIL import Image
-from torch.utils.data.dataset import random_split, ConcatDataset
+from torch.utils.data.dataset import random_split
 from torchvision.datasets import VisionDataset, VOCDetection
 
 
@@ -218,8 +218,7 @@ class WeightedConcatDataset(torch.utils.data.ConcatDataset):
         return w
 
 
-def split_posneg_trainval(datasets: dict, train_fraction=0.7, include_negative=True, use: list=None):
-
+def split_posneg_trainval(datasets: dict, train_fraction=0.7, include_negative=True, use: list = None):
     if use is not None:
         datasets = {k: datasets[k] for k in use}
 
@@ -239,8 +238,12 @@ def split_posneg_trainval(datasets: dict, train_fraction=0.7, include_negative=T
         for ds_name, ds_pn in zip(ds_names, ds_pns):
             n_train = int(len(ds_pn[ds]) * train_fraction)
             n_validate = len(ds_pn[ds]) - n_train
-            datasets_train[ds_name.format(ds)], datasets_validate[ds_name.format(ds)] = random_split(ds_pn[ds],
-                                                                                                     [n_train,
-                                                                                                   n_validate])
-
-    return datasets_train, datasets_validate
+            if train_fraction == 1.0:
+                datasets_train[ds_name.format(ds)] = ds_pn[ds]
+            else:
+                datasets_train[ds_name.format(ds)], datasets_validate[ds_name.format(ds)] = random_split(ds_pn[ds],
+                                                                                                 [n_train, n_validate])
+    if train_fraction == 1.0:
+        return datasets_train
+    else:
+        return datasets_train, datasets_validate
