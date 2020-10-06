@@ -8,7 +8,7 @@ import torch
 from PIL import Image
 from ignite.engine import Events
 from pathlib import Path
-from torch.utils.data import DataLoader
+from torch.utils.data import DataLoader, SubsetRandomSampler
 from torch.utils.data.dataset import Subset
 from torch.utils.tensorboard import SummaryWriter
 from torchvision.datasets.coco import CocoDetection
@@ -77,9 +77,9 @@ def get_data_loaders(train_ann_file, test_ann_file, batch_size, test_size, image
         transforms=get_transform(train=False, image_size=image_size),
         use_mask=use_mask)
 
-    if _use_toy_testing_set:
-        dataset = Subset(dataset, range(1000))
-        dataset_test = Subset(dataset_test, range(1000))
+    # if _use_toy_testing_set:
+    #     dataset = Subset(dataset, range(1000))
+    #     dataset_test = Subset(dataset_test, range(1000))
     
     labels_enumeration = dataset.coco.cats
     
@@ -87,8 +87,12 @@ def get_data_loaders(train_ann_file, test_ann_file, batch_size, test_size, image
     dataset_val = torch.utils.data.Subset(dataset_test, indices_val[:test_size])
 
     # set train and validation data-loaders
-    train_loader = DataLoader(dataset, batch_size=batch_size, shuffle=True, num_workers=6,
-                              collate_fn=safe_collate, pin_memory=True)
+    if _use_toy_testing_set:
+        train_loader = DataLoader(dataset, batch_size=batch_size, sampler=SubsetRandomSampler(range(1000)),
+                                  num_workers=6, collate_fn=safe_collate, pin_memory=True)
+    else:
+        train_loader = DataLoader(dataset, batch_size=batch_size, shuffle=True, num_workers=6,
+                                  collate_fn=safe_collate, pin_memory=True)
     val_loader = DataLoader(dataset_val, batch_size=batch_size, shuffle=False, num_workers=6,
                             collate_fn=safe_collate, pin_memory=True)
     
