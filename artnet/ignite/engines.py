@@ -54,6 +54,7 @@ def create_evaluator(model, device):
         outputs = [{k: v.to(device) for k, v in t.items()} for t in outputs]
 
         res = {target["image_id"].item(): output for target, output in zip(targets, outputs)}
+        print('Evaluating iou_types: {}'.format(engine.state.coco_evaluator.iou_types))
         engine.state.coco_evaluator.update(res)
 
         images_model = outputs = None
@@ -81,3 +82,5 @@ def prepare_batch(batch, device=None):
             pprint(boxes)
 
     return images, targets
+
+import tensorboard.program

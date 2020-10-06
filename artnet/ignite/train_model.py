@@ -9,6 +9,7 @@ from PIL import Image
 from ignite.engine import Events
 from pathlib import Path
 from torch.utils.data import DataLoader
+from torch.utils.data.dataset import Subset
 from torch.utils.tensorboard import SummaryWriter
 from torchvision.datasets.coco import CocoDetection
 
@@ -63,7 +64,7 @@ class CocoMask(CocoDetection):
         return img, new_target
 
 
-def get_data_loaders(train_ann_file, test_ann_file, batch_size, test_size, image_size, use_mask):
+def get_data_loaders(train_ann_file, test_ann_file, batch_size, test_size, image_size, use_mask, _use_toy_testing_set=False):
     # first, crate PyTorch dataset objects, for the train and validation data.
     dataset = CocoMask(
         root=Path.joinpath(Path(train_ann_file).parent.parent, train_ann_file.split('_')[1].split('.')[0]),
@@ -75,6 +76,10 @@ def get_data_loaders(train_ann_file, test_ann_file, batch_size, test_size, image
         annFile=test_ann_file,
         transforms=get_transform(train=False, image_size=image_size),
         use_mask=use_mask)
+
+    if _use_toy_testing_set:
+        dataset = Subset(dataset, range(1000))
+        dataset_test = Subset(dataset_test, range(1000))
     
     labels_enumeration = dataset.coco.cats
     
@@ -94,14 +99,14 @@ def run(warmup_iterations=5000, batch_size=4, test_size=2000, epochs=10, log_int
         train_dataset_ann_file='~/bigdata/coco/annotations/instances_train2017.json',
         val_dataset_ann_file='~/bigdata/coco/annotations/instances_val2017.json', input_checkpoint='',
         load_optimizer=False, output_dir="/tmp/checkpoints", log_dir="/tmp/tensorboard_logs", lr=0.005, momentum=0.9,
-        weight_decay=0.0005, use_mask=True):
+        weight_decay=0.0005, use_mask=True, use_toy_testing_data=False):
     # Define train and test datasets
     train_loader, val_loader, labels_enum = get_data_loaders(train_dataset_ann_file,
                                                              val_dataset_ann_file,
                                                              batch_size,
                                                              test_size,
                                                              configuration_data.get('image_size'),
-                                                             use_mask=use_mask)
+                                                             use_mask=use_mask, _use_toy_testing_set=use_toy_testing_data)
     val_dataset = list(chain.from_iterable(zip(*batch) for batch in iter(val_loader)))
     coco_api_val_dataset = convert_to_coco_api(val_dataset)
     num_classes = max(labels_enum.keys()) + 1  # number of classes plus one for background class
