@@ -6,7 +6,7 @@ from operator import add
 import numpy as np
 import torch
 from PIL import Image
-from ignite.engine import Events
+from ignite.engine import Events, State
 from pathlib import Path
 from torch.utils.data import DataLoader, SubsetRandomSampler
 from torch.utils.data.dataset import Subset
@@ -193,7 +193,10 @@ def run(warmup_iterations=5000, batch_size=4, test_size=2000, epochs=10, log_int
     def on_epoch_completed(engine):
         engine.state.scheduler.step()
         if evaluator.state is None:
-            evaluator.state = engine.state
+            print('Evaluator state is None. Setting evaluator to new state. Engine state for reference:'.)
+            print(engine.state)
+            # evaluator.state = engine.state
+            evaluator.state = State()
         evaluator.run(val_loader)
         for res_type in evaluator.state.coco_evaluator.iou_types:
             average_precision_05 = evaluator.state.coco_evaluator.coco_eval[res_type].stats[1]
