@@ -192,11 +192,6 @@ def run(warmup_iterations=5000, batch_size=4, test_size=2000, epochs=10, log_int
     @trainer.on(Events.EPOCH_COMPLETED)
     def on_epoch_completed(engine):
         engine.state.scheduler.step()
-        if evaluator.state is None:
-            print('Evaluator state is None. Setting evaluator to new state. Engine state for reference:')
-            print(engine.state)
-            # evaluator.state = engine.state
-            evaluator.state = State()
         evaluator.run(val_loader)
         for res_type in evaluator.state.coco_evaluator.iou_types:
             average_precision_05 = evaluator.state.coco_evaluator.coco_eval[res_type].stats[1]
@@ -213,7 +208,8 @@ def run(warmup_iterations=5000, batch_size=4, test_size=2000, epochs=10, log_int
             'labels_enumeration': labels_enum}
         utils.save_on_master(checkpoint, checkpoint_path)
         print('Model checkpoint from epoch {} was saved at {}'.format(engine.state.epoch, checkpoint_path))
-        evaluator.state = checkpoint = None
+        checkpoint = None
+        evaluator.state = State()
 
     @evaluator.on(Events.STARTED)
     def on_evaluation_started(engine):
