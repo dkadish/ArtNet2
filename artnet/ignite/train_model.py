@@ -103,7 +103,7 @@ def run(warmup_iterations=5000, batch_size=4, test_size=2000, epochs=10, log_int
         train_dataset_ann_file='~/bigdata/coco/annotations/instances_train2017.json',
         val_dataset_ann_file='~/bigdata/coco/annotations/instances_val2017.json', input_checkpoint='',
         load_optimizer=False, output_dir="/tmp/checkpoints", log_dir="/tmp/tensorboard_logs", lr=0.005, momentum=0.9,
-        weight_decay=0.0005, use_mask=True, use_toy_testing_data=False):
+        weight_decay=0.0005, use_mask=True, use_toy_testing_data=False, backbone_name='resnet101'):
     # Define train and test datasets
     train_loader, val_loader, labels_enum = get_data_loaders(train_dataset_ann_file,
                                                              val_dataset_ann_file,
@@ -125,7 +125,7 @@ def run(warmup_iterations=5000, batch_size=4, test_size=2000, epochs=10, log_int
         model = get_model_instance_segmentation(num_classes, configuration_data.get('mask_predictor_hidden_layer'))
     else:
         print('Loading FasterRCNN Model...')
-        model = get_model_instance_detection(num_classes)
+        model = get_model_instance_detection(num_classes, backbone_name=backbone_name)
     iou_types = get_iou_types(model)
     
     # if there is more than one GPU, parallelize the model
