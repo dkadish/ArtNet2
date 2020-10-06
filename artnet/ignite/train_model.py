@@ -193,7 +193,7 @@ def run(warmup_iterations=5000, batch_size=4, test_size=2000, epochs=10, log_int
     def on_epoch_completed(engine):
         engine.state.scheduler.step()
         if evaluator.state is None:
-            print('Evaluator state is None. Setting evaluator to new state. Engine state for reference:'.)
+            print('Evaluator state is None. Setting evaluator to new state. Engine state for reference:')
             print(engine.state)
             # evaluator.state = engine.state
             evaluator.state = State()
