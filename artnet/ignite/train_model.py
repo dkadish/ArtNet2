@@ -17,7 +17,8 @@ from ..utils import utils
 from ..utils.coco_eval import CocoEvaluator
 from ..utils.coco_utils import convert_to_coco_api
 from .transforms import get_transform
-from .utilities import draw_debug_images, draw_mask, get_model_instance_segmentation, safe_collate, get_iou_types
+from .utilities import draw_debug_images, draw_mask, get_model_instance_segmentation, safe_collate, get_iou_types, \
+    get_model_instance_detection
 
 # task = Task.init(project_name='Object Detection with TRAINS, Ignite and TensorBoard',
 #                  task_name='Train MaskRCNN with torchvision')
@@ -93,14 +94,14 @@ def run(warmup_iterations=5000, batch_size=4, test_size=2000, epochs=10, log_int
         train_dataset_ann_file='~/bigdata/coco/annotations/instances_train2017.json',
         val_dataset_ann_file='~/bigdata/coco/annotations/instances_val2017.json', input_checkpoint='',
         load_optimizer=False, output_dir="/tmp/checkpoints", log_dir="/tmp/tensorboard_logs", lr=0.005, momentum=0.9,
-        weight_decay=0.0005):
+        weight_decay=0.0005, use_mask=True):
     # Define train and test datasets
     train_loader, val_loader, labels_enum = get_data_loaders(train_dataset_ann_file,
                                                              val_dataset_ann_file,
                                                              batch_size,
                                                              test_size,
                                                              configuration_data.get('image_size'),
-                                                             use_mask=True)
+                                                             use_mask=use_mask)
     val_dataset = list(chain.from_iterable(zip(*batch) for batch in iter(val_loader)))
     coco_api_val_dataset = convert_to_coco_api(val_dataset)
     num_classes = max(labels_enum.keys()) + 1  # number of classes plus one for background class
@@ -109,8 +110,13 @@ def run(warmup_iterations=5000, batch_size=4, test_size=2000, epochs=10, log_int
     # Set the training device to GPU if available - if not set it to CPU
     device = torch.cuda.current_device() if torch.cuda.is_available() else torch.device('cpu')
     torch.backends.cudnn.benchmark = True if torch.cuda.is_available() else False  # optimization for fixed input size
-    
-    model = get_model_instance_segmentation(num_classes, configuration_data.get('mask_predictor_hidden_layer'))
+
+    if use_mask:
+        print('Loading MaskRCNN Model...')
+        model = get_model_instance_segmentation(num_classes, configuration_data.get('mask_predictor_hidden_layer'))
+    else:
+        print('Loading FasterRCNN Model...')
+        model = get_model_instance_detection(num_classes)
     iou_types = get_iou_types(model)
     
     # if there is more than one GPU, parallelize the model

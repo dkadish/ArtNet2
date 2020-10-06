@@ -23,6 +23,8 @@ def fasterrcnn_shape_resnet50(device, num_classes):
 
     missing, unexpected = backbone.load_state_dict(state_dict_body, strict=False)
 
+    print('When creating shape-resnet50...\nMissing states: {}\nUnexpected states: {}'.format(missing, unexpected))
+
     model = FasterRCNN(backbone, num_classes=2)
     model.to(device)
 
