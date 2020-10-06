@@ -8,3 +8,4 @@ pandas~=1.1.1
 numpy~=1.19.1
 altair
 cython~=0.29
+tqdm
