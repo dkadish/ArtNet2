@@ -16,3 +16,4 @@ pytorch-ignite
 pyocclient
 joblib
 pycocotools
+opencv-python

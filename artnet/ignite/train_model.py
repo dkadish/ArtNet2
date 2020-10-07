@@ -2,6 +2,7 @@ import os
 from argparse import ArgumentParser, ArgumentDefaultsHelpFormatter
 from itertools import chain
 from operator import add
+from pprint import pprint
 
 import numpy as np
 import torch
@@ -245,3 +246,51 @@ def run(warmup_iterations=5000, batch_size=4, test_size=2000, epochs=10, log_int
 
     trainer.run(train_loader, max_epochs=epochs)
     writer.close()
+
+if __name__ == "__main__":
+    parser = ArgumentParser(formatter_class=ArgumentDefaultsHelpFormatter)
+    parser.add_argument('--warmup_iterations', type=int, default=5000,
+                        help='Number of iteration for warmup period (until reaching base learning rate)')
+    parser.add_argument('--batch_size', type=int, default=4,
+                        help='input batch size for training and validation')
+    parser.add_argument('--test_size', type=int, default=2000,
+                        help='number of frames from the test dataset to use for validation')
+    parser.add_argument('--epochs', type=int, default=10,
+                        help='number of epochs to train')
+    parser.add_argument('--log_interval', type=int, default=100,
+                        help='how many batches to wait before logging training status')
+    parser.add_argument('--debug_images_interval', type=int, default=500,
+                        help='how many batches to wait before logging debug images')
+    parser.add_argument('--train_dataset_ann_file', type=str,
+                        default='./annotations/instances_train2017.json',
+                        help='annotation file of train dataset')
+    parser.add_argument('--val_dataset_ann_file', type=str, default='./annotations/instances_val2017.json',
+                        help='annotation file of test dataset')
+    parser.add_argument('--input_checkpoint', type=str, default='',
+                        help='Loading model weights from this checkpoint.')
+    parser.add_argument('--load_optimizer', default=False, type=bool,
+                        help='Use optimizer and lr_scheduler saved in the input checkpoint to resume training')
+    parser.add_argument("--output_dir", type=str, default="./checkpoints",
+                        help="output directory for saving models checkpoints")
+    parser.add_argument("--log_dir", type=str, default="./runs",
+                        help="log directory for Tensorboard log output")
+    parser.add_argument("--lr", type=float, default=0.005,
+                        help="learning rate for optimizer")
+    parser.add_argument("--momentum", type=float, default=0.9,
+                        help="momentum for optimizer")
+    parser.add_argument("--weight_decay", type=float, default=0.0005,
+                        help="weight decay for optimizer")
+    parser.add_argument("--use_mask", default=False, type=bool,
+                        help='use MaskRCNN if True. If False, use FasterRCNN for boxes only.')
+    parser.add_argument("--use_toy_testing_data", default=False, type=bool,
+                        help='use a small toy dataset to make sure things work')
+    parser.add_argument("--backbone_name", type=str, default='resnet101',
+                        help='which backbone to use. options are resnet101, resnet50, and shape-resnet50')
+    args = parser.parse_args()
+
+    if not os.path.exists(args.output_dir):
+        utils.mkdir(args.output_dir)
+    if not os.path.exists(args.log_dir):
+        utils.mkdir(args.log_dir)
+
+    run(**dict(args._get_kwargs()))
