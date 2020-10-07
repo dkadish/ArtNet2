@@ -8,4 +8,12 @@ pandas~=1.1.1
 numpy~=1.19.1
 altair
 cython~=0.29
-tqdm
+tqdm~=4.50.0
+attrs~=20.1.0
+setuptools~=49.6.0
+jinja2~=2.11.2
+pytorch-ignite
+Cython
+pycoclient
+joblib
+pycocotools
