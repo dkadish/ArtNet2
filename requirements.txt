@@ -13,7 +13,6 @@ attrs~=20.1.0
 setuptools~=49.6.0
 jinja2~=2.11.2
 pytorch-ignite
-Cython
-pycoclient
+pyocclient
 joblib
 pycocotools
