@@ -34,7 +34,11 @@ def run(batch_size=4, detection_thresh=0.4, log_interval=100, debug_images_inter
         input_checkpoint='/tmp/checkpoints/model_epoch_10.pth', output_dir="/tmp/inference_results",
         log_dir="/tmp/tensorboard_logs",
         use_mask=True, backbone_name='resnet101'):
-    writer = SummaryWriter(log_dir=log_dir)
+    if use_mask:
+        comment = 'mask-eval'
+    else:
+        comment = 'box-{}-eval'.format(backbone_name)
+    writer = SummaryWriter(log_dir=log_dir, comment=comment)
     input_checkpoint = torch.load(input_checkpoint)
     labels_enum = input_checkpoint.get('labels_enumeration')
     model_configuration = input_checkpoint.get('configuration')
