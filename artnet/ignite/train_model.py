@@ -141,8 +141,12 @@ def run(warmup_iterations=5000, batch_size=4, test_size=2000, epochs=10, log_int
         print('Loading model checkpoint from '.format(input_checkpoint))
         input_checkpoint = torch.load(input_checkpoint, map_location=torch.device(device))
         model.load_state_dict(input_checkpoint['model'])
-    
-    writer = SummaryWriter(log_dir=log_dir)
+
+    if use_mask:
+        comment = 'mask'
+    else:
+        comment = 'box-{}'.format(backbone_name)
+    writer = SummaryWriter(log_dir=log_dir, comment=comment)
     
     # define Ignite's train and evaluation engine
     trainer = create_trainer(model, device)
