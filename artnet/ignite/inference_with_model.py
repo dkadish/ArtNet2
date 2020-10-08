@@ -150,6 +150,10 @@ if __name__ == "__main__":
                         help="output directory for saving models checkpoints")
     parser.add_argument("--log_dir", type=str, default="/tmp/tensorboard_logs",
                         help="log directory for Tensorboard log output")
+    parser.add_argument("--use_mask", default=False, type=bool,
+                        help='use MaskRCNN if True. If False, use FasterRCNN for boxes only.')
+    parser.add_argument("--backbone_name", type=str, default='resnet101',
+                        help='which backbone to use. options are resnet101, resnet50, and shape-resnet50')
     args = parser.parse_args()
 
     if not os.path.exists(args.output_dir):
