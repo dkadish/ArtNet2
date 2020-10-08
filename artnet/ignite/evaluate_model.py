@@ -127,8 +127,6 @@ if __name__ == "__main__":
                         help='which backbone to use. options are resnet101, resnet50, and shape-resnet50')
     args = parser.parse_args()
 
-    if not os.path.exists(args.output_dir):
-        utils.mkdir(args.output_dir)
     if not os.path.exists(args.log_dir):
         utils.mkdir(args.log_dir)
 
