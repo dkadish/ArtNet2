@@ -8,7 +8,8 @@ from torch.utils.tensorboard import SummaryWriter
 from argparse import ArgumentParser
 from pathlib import Path
 
-from .utilities import get_iou_types, draw_boxes, get_model_instance_segmentation, CocoLikeAnnotations
+from .utilities import get_iou_types, draw_boxes, get_model_instance_segmentation, CocoLikeAnnotations, \
+    get_model_instance_detection
 from ..utils import utils
 from torchvision.transforms import functional as F
 
@@ -31,7 +32,8 @@ def rescale_box(box, image_size, orig_height, orig_width):
 def run(batch_size=4, detection_thresh=0.4, log_interval=100, debug_images_interval=500,
         input_dataset_root='/media/dan/bigdata/datasets/coco/2017/val2017',
         input_checkpoint='/tmp/checkpoints/model_epoch_10.pth', output_dir="/tmp/inference_results",
-        log_dir="/tmp/tensorboard_logs"):
+        log_dir="/tmp/tensorboard_logs",
+        use_mask=True, backbone_name='resnet101'):
     writer = SummaryWriter(log_dir=log_dir)
     input_checkpoint = torch.load(input_checkpoint)
     labels_enum = input_checkpoint.get('labels_enumeration')
@@ -43,8 +45,13 @@ def run(batch_size=4, detection_thresh=0.4, log_interval=100, debug_images_inter
     device = torch.cuda.current_device() if torch.cuda.is_available() else torch.device('cpu')
     torch.backends.cudnn.benchmark = True if torch.cuda.is_available() else False  # optimization for fixed input size
 
-    model = get_model_instance_segmentation(model_configuration.get('num_classes'),
-                                            model_configuration.get('mask_predictor_hidden_layer'))
+    num_classes = model_configuration.get('num_classes')
+    if use_mask:
+        print('Loading MaskRCNN Model...')
+        model = get_model_instance_segmentation(num_classes, configuration_data.get('mask_predictor_hidden_layer'))
+    else:
+        print('Loading FasterRCNN Model...')
+        model = get_model_instance_detection(num_classes, backbone_name=backbone_name)
 
     # if there is more than one GPU, parallelize the model
     if torch.cuda.device_count() > 1:
@@ -91,7 +98,7 @@ def run(batch_size=4, detection_thresh=0.4, log_interval=100, debug_images_inter
             torch_out = model(input_images.to(device))
 
         for img_num, image in enumerate(input_images):
-            valid_detections = torch_out[img_num].get('scores') >= args.detection_thresh
+            valid_detections = torch_out[img_num].get('scores') >= detection_thresh
             img_boxes = torch_out[img_num].get('boxes')[valid_detections].cpu().numpy()
             img_labels_ids = torch_out[img_num].get('labels')[valid_detections].cpu().numpy()
             img_labels = [labels_enum[label]['name'] for label in img_labels_ids]
@@ -122,3 +129,32 @@ def run(batch_size=4, detection_thresh=0.4, log_interval=100, debug_images_inter
         batch_paths = []
 
     coco_like_anns.dump_to_json(path_to_json=path_to_json)
+
+
+if __name__ == "__main__":
+    parser = ArgumentParser()
+    parser.add_argument('--batch_size', type=int, default=4,
+                        help='input batch size for training and validation (default: 4)')
+    parser.add_argument('--detection_thresh', type=float, default=0.4,
+                        help='Inference confidence threshold')
+    parser.add_argument('--log_interval', type=int, default=100,
+                        help='how many batches to wait before logging training status')
+    parser.add_argument('--debug_images_interval', type=int, default=500,
+                        help='how many batches to wait before logging debug images')
+    parser.add_argument('--input_dataset_root', type=str,
+                        default='/media/dan/bigdata/datasets/coco/2017/val2017',
+                        help='annotation file of test dataset')
+    parser.add_argument('--input_checkpoint', type=str, default='/tmp/checkpoints/model_epoch_10.pth',
+                        help='Checkpoint to use for inference')
+    parser.add_argument("--output_dir", type=str, default="/tmp/inference_results",
+                        help="output directory for saving models checkpoints")
+    parser.add_argument("--log_dir", type=str, default="/tmp/tensorboard_logs",
+                        help="log directory for Tensorboard log output")
+    args = parser.parse_args()
+
+    if not os.path.exists(args.output_dir):
+        utils.mkdir(args.output_dir)
+    if not os.path.exists(args.log_dir):
+        utils.mkdir(args.log_dir)
+
+    run(**dict(args._get_kwargs()))
