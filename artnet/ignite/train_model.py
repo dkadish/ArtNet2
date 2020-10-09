@@ -2,6 +2,8 @@ import os
 from argparse import ArgumentParser, ArgumentDefaultsHelpFormatter
 from itertools import chain
 
+import numpy as np
+
 import torch
 from ignite.contrib.handlers import TensorboardLogger
 from ignite.contrib.handlers.tensorboard_logger import WeightsHistHandler, OptimizerParamsHandler, GradsHistHandler, \
@@ -11,6 +13,7 @@ from torch.utils.tensorboard import SummaryWriter
 
 from .data import get_data_loaders, configuration_data
 from .engines import create_trainer, create_evaluator
+from ..plot import get_pr_levels
 from ..utils import utils
 from ..utils.coco_eval import CocoEvaluator
 from ..utils.coco_utils import convert_to_coco_api
@@ -73,13 +76,12 @@ def run(warmup_iterations=5000, batch_size=4, test_size=2000, epochs=10, log_int
         comment = 'box-{}'.format(backbone_name)
     writer = SummaryWriter(log_dir=log_dir, comment=comment)
     # Write hyperparams
-    writer.add_hparams({
+    hparam_dict = {
         'warmup_iterations': 5000,
         'batch_size': 4,
         'test_size': 2000,
         'epochs': 10,
-    })
-
+    }
 
     # define Ignite's train and evaluation engine
     trainer = create_trainer(model, device)
@@ -206,6 +208,12 @@ def run(warmup_iterations=5000, batch_size=4, test_size=2000, epochs=10, log_int
         # accumulate predictions from all images
         engine.state.coco_evaluator.accumulate()
         engine.state.coco_evaluator.summarize()
+
+        pr_50, pr_75 = get_pr_levels(engine.state.coco_evaluator.coco_eval['bbox'])
+        writer.add_hparams(hparam_dict, {
+            'hparams/AP.5': np.mean(pr_50),
+            'hparams/AP.75': np.mean(pr_75)
+        })
 
     trainer.run(train_loader, max_epochs=epochs)
     writer.close()
