@@ -133,7 +133,7 @@ def convert_xmls_to_cocojson(annotation_paths: List[str],
         output_json_dict['categories'].append(category_info)
 
     if only_people_categories:
-        output_json_dict['categories'] = output_json_dict['categories'][0]
+        output_json_dict['categories'] = [output_json_dict['categories'][0]]
         print('Only People Categories')
         print(output_json_dict['categories'])
 

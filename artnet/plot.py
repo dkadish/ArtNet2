@@ -32,16 +32,14 @@ def plot_pr_curve_tensorboard(p50, p75, writer=None):
     if writer is None:
         writer = SummaryWriter()
 
-    pr_dict = {
-        '[{:.3f}] C75'.format(np.mean(p75)): p75,
-        '[{:.3f}] C50'.format(np.mean(p50)): p50
-    }
+    for x, y in zip(np.linspace(0.0,1.0,num=101), p50):
+        writer.add_scalar('pr_curve/AP.5', y, x)
 
-    data = zip(*[list(v) for v in pr_dict.values()])
+    for x, y in zip(np.linspace(0.0,1.0,num=101), p75):
+        writer.add_scalar('pr_curve/AP.75', y, x)
 
-    for i, v in enumerate(data):
-        d = dict(zip(pr_dict.keys(), v))
-        writer.add_scalars('pr_curve', d, i)
+    writer.add_scalar('metrics/AP.5', np.mean(p50), 0)
+    writer.add_scalar('metrics/AP.5', np.mean(p75), 0)
 
 
 def plot_pr_curve_altair(p50, p75):
