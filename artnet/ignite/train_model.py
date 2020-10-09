@@ -1,3 +1,4 @@
+import copy
 import os
 from argparse import ArgumentParser, ArgumentDefaultsHelpFormatter
 from itertools import chain
@@ -20,8 +21,8 @@ from ..utils.coco_utils import convert_to_coco_api
 from .utilities import draw_debug_images, draw_mask, get_model_instance_segmentation, get_iou_types, \
     get_model_instance_detection
 
-import torch.multiprocessing
-torch.multiprocessing.set_sharing_strategy('file_system')
+# import torch.multiprocessing
+# torch.multiprocessing.set_sharing_strategy('file_system')
 
 # task = Task.init(project_name='Object Detection with TRAINS, Ignite and TensorBoard',
 #                  task_name='Train MaskRCNN with torchvision')
@@ -41,7 +42,7 @@ def run(warmup_iterations=5000, batch_size=4, test_size=2000, epochs=10, log_int
                                                              test_size,
                                                              configuration_data.get('image_size'),
                                                              use_mask=use_mask, _use_toy_testing_set=use_toy_testing_data)
-    val_dataset = list(chain.from_iterable(zip(*batch) for batch in iter(val_loader)))
+    val_dataset = list(chain.from_iterable(zip(*copy.deepcopy(batch)) for batch in iter(val_loader))) #TODO Figure out what this does and use deepcopy.
     coco_api_val_dataset = convert_to_coco_api(val_dataset)
     num_classes = max(labels_enum.keys()) + 1  # number of classes plus one for background class
     configuration_data['num_classes'] = num_classes
