@@ -20,6 +20,9 @@ from ..utils.coco_utils import convert_to_coco_api
 from .utilities import draw_debug_images, draw_mask, get_model_instance_segmentation, get_iou_types, \
     get_model_instance_detection
 
+import torch.multiprocessing
+torch.multiprocessing.set_sharing_strategy('file_system')
+
 # task = Task.init(project_name='Object Detection with TRAINS, Ignite and TensorBoard',
 #                  task_name='Train MaskRCNN with torchvision')
 
