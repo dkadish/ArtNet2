@@ -44,18 +44,28 @@ def create_trainer(model, device):
 
 def create_evaluator(model, device):
     def update_model(engine, batch):
-        images, targets = prepare_batch(batch, device=device)
-        images_model = copy.deepcopy(images)
+        try:
+            images, targets = prepare_batch(batch, device=device)
+            images_model = copy.deepcopy(images)
 
-        torch.cuda.synchronize()
-        with torch.no_grad():
-            outputs = model(images_model)
+            try:
+                torch.cuda.synchronize()
+            except AssertionError:
+                pass
 
-        outputs = [{k: v.to(device) for k, v in t.items()} for t in outputs]
+            with torch.no_grad():
+                outputs = model(images_model)
 
-        res = {target["image_id"].item(): output for target, output in zip(targets, outputs)}
-        # print('Evaluating iou_types: {}'.format(engine.state.coco_evaluator.iou_types))
-        engine.state.coco_evaluator.update(res)
+            outputs = [{k: v.to(device) for k, v in t.items()} for t in outputs]
+
+            res = {target["image_id"].item(): output for target, output in zip(targets, outputs)}
+
+            # print('Evaluating iou_types: {}'.format(engine.state.coco_evaluator.iou_types))
+            engine.state.coco_evaluator.update(res)
+
+        except ValueError as e:
+            print('Warning. Empty batch. Returning empty images, targets lists.')
+            images, targets, res = [], [], {}
 
         images_model = outputs = None
 

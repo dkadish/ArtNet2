@@ -5,18 +5,23 @@ import argparse
 import json
 import shutil
 import tarfile
+import uuid
 import xml.etree.ElementTree as ET
 from pathlib import Path
 from typing import Dict, List
 from tqdm import tqdm
 import re
 
+from itertools import count
+id = count()
 
 def get_label2id(labels_path: str) -> Dict[str, int]:
-    """id is 1 vim dastart"""
+    """id is 1 start"""
     with open(labels_path, 'r') as f:
-        labels_str = f.read().split()
+        labels_str = f.read().split('\n')
     labels_ids = list(range(1, len(labels_str)+1))
+
+    print('Found {} labels'.format(len(labels_str)))
     return dict(zip(labels_str, labels_ids))
 
 
@@ -45,9 +50,10 @@ def get_image_info(annotation_root, extract_num_from_imgid=True, is_peopleart=Fa
     else:
         filename = os.path.basename(path)
     img_name = os.path.basename(filename)
-    img_id = os.path.splitext(img_name)[0]
-    if extract_num_from_imgid and isinstance(img_id, str):
-        img_id = int(re.findall(r'\d+', img_id)[0])
+    # img_id = os.path.splitext(img_name)[0]
+    # if extract_num_from_imgid and isinstance(img_id, str):
+    #     img_id = int(re.findall(r'\d+', img_id)[0])
+    img_id = next(id)
 
     size = annotation_root.find('size')
     width = int(size.findtext('width'))
@@ -94,7 +100,7 @@ def get_coco_annotation_from_obj(obj, label2id):
 def convert_xmls_to_cocojson(annotation_paths: List[str],
                              label2id: Dict[str, int],
                              output_jsonpath: str,
-                             extract_num_from_imgid: bool = True, is_peopleart = False):
+                             extract_num_from_imgid: bool = True, is_peopleart=False, only_people_categories=False):
     output_json_dict = {
         "images": [],
         "type": "instances",
@@ -125,6 +131,11 @@ def convert_xmls_to_cocojson(annotation_paths: List[str],
     for label, label_id in label2id.items():
         category_info = {'supercategory': 'none', 'id': label_id, 'name': label}
         output_json_dict['categories'].append(category_info)
+
+    if only_people_categories:
+        output_json_dict['categories'] = output_json_dict['categories'][0]
+        print('Only People Categories')
+        print(output_json_dict['categories'])
 
     with open(output_jsonpath, 'w') as f:
         output_json = json.dumps(output_json_dict)
@@ -162,6 +173,8 @@ def main():
     parser.add_argument('--ext', type=str, default='', help='additional extension of annotation file')
     parser.add_argument('--is_peopleart', default=False, action='store_true',
                         help='Engage special extension for peopleart')
+    parser.add_argument('--only_people_categories', default=False, action='store_true',
+                        help='Engage special extension for peopleart')
     args = parser.parse_args()
     label2id = get_label2id(labels_path=args.labels)
     ann_paths = get_annpaths(
@@ -175,7 +188,8 @@ def main():
         label2id=label2id,
         output_jsonpath=args.output,
         extract_num_from_imgid=False,
-        is_peopleart=args.is_peopleart
+        is_peopleart=args.is_peopleart,
+        only_people_categories=args.only_people_categories
     )
     save_and_compress_images(
         image_dir=args.image_dir,
@@ -183,6 +197,20 @@ def main():
         json_file=args.output
     )
 
+#TODO this is a dump of some code. Not to be used as is.
+from pycocotools.coco import COCO
+from pathlib import Path
+import json
+def remove_nonperson_categories():
+    path_to_annotations_style = Path('./annotations/style_val2017.json')
+
+    # instantiate COCO specifying the annotations json path
+    coco = COCO(path_to_annotations_style)
+    coco.cats = coco.cats[1]
+    coco.createIndex()
+
+    with open('./annotations/person_val2017.json', 'w') as j:
+        json.dump(coco.dataset, j)
 
 if __name__ == '__main__':
     main()

@@ -36,6 +36,8 @@ def run(warmup_iterations=5000, batch_size=4, test_size=2000, epochs=10, log_int
     coco_api_val_dataset = convert_to_coco_api(val_dataset)
     num_classes = max(labels_enum.keys()) + 1  # number of classes plus one for background class
     configuration_data['num_classes'] = num_classes
+
+    print('Training with {} classes...'.format(num_classes))
     
     # Set the training device to GPU if available - if not set it to CPU
     device = torch.cuda.current_device() if torch.cuda.is_available() else torch.device('cpu')

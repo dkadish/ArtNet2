@@ -4,7 +4,7 @@ from itertools import chain
 
 import numpy as np
 import torch
-from ignite.engine import Events
+from ignite.engine import Events, State
 from torch.utils.tensorboard import SummaryWriter
 
 from .data import get_eval_data_loader, configuration_data
@@ -30,6 +30,7 @@ def run(batch_size=1, log_interval=100, debug_images_interval=500,
     coco_api_val_dataset = convert_to_coco_api(val_dataset)
     num_classes = max(labels_enum.keys()) + 1  # number of classes plus one for background class
     configuration_data['num_classes'] = num_classes
+    print('Testing with {} classes...'.format(num_classes))
 
     # Set the training device to GPU if available - if not set it to CPU
     device = torch.cuda.current_device() if torch.cuda.is_available() else torch.device('cpu')
@@ -51,7 +52,7 @@ def run(batch_size=1, log_interval=100, debug_images_interval=500,
     # copy the model to each device
     model.to(device)
 
-    print('Loading model checkpoint from '.format(input_checkpoint))
+    print('Loading model checkpoint from {}'.format(input_checkpoint))
     input_checkpoint = torch.load(input_checkpoint, map_location=torch.device(device))
     model.load_state_dict(input_checkpoint['model'])
 
@@ -103,6 +104,7 @@ def run(batch_size=1, log_interval=100, debug_images_interval=500,
         writer.add_text(tag='AP.5', text_string=str(np.mean(pr_50)), global_step=engine.state.iteration)
         writer.add_text(tag='AP.75', text_string=str(np.mean(pr_75)), global_step=engine.state.iteration)
 
+    # evaluator.state = State()
     evaluator.run(val_loader)
     writer.close()
 
