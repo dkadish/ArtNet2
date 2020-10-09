@@ -3,6 +3,9 @@ from argparse import ArgumentParser, ArgumentDefaultsHelpFormatter
 from itertools import chain
 
 import torch
+from ignite.contrib.handlers import TensorboardLogger
+from ignite.contrib.handlers.tensorboard_logger import WeightsHistHandler, OptimizerParamsHandler, GradsHistHandler, \
+    GradsScalarHandler
 from ignite.engine import Events, State
 from torch.utils.tensorboard import SummaryWriter
 
@@ -69,11 +72,38 @@ def run(warmup_iterations=5000, batch_size=4, test_size=2000, epochs=10, log_int
     else:
         comment = 'box-{}'.format(backbone_name)
     writer = SummaryWriter(log_dir=log_dir, comment=comment)
-    
+    # Write hyperparams
+    writer.add_hparams({
+        'warmup_iterations': 5000,
+        'batch_size': 4,
+        'test_size': 2000,
+        'epochs': 10,
+    })
+
+
     # define Ignite's train and evaluation engine
     trainer = create_trainer(model, device)
     evaluator = create_evaluator(model, device)
-    
+
+    tb_logger = TensorboardLogger(log_dir=log_dir)
+    tb_logger.attach(
+        trainer,
+        event_name=Events.ITERATION_COMPLETED,
+        log_handler=WeightsHistHandler(model)
+    )
+    # Attach the logger to the trainer to log model's weights norm after each iteration
+    tb_logger.attach(
+        trainer,
+        event_name=Events.ITERATION_COMPLETED,
+        log_handler=GradsHistHandler(model)
+    )
+    # Attach the logger to the trainer to log model's weights norm after each iteration
+    tb_logger.attach(
+        trainer,
+        event_name=Events.ITERATION_COMPLETED,
+        log_handler=GradsScalarHandler(model, reduction=torch.norm)
+    )
+
     @trainer.on(Events.STARTED)
     def on_training_started(engine):
         # construct an optimizer
@@ -82,6 +112,13 @@ def run(warmup_iterations=5000, batch_size=4, test_size=2000, epochs=10, log_int
                                                  lr=lr,
                                                  momentum=momentum,
                                                  weight_decay=weight_decay)
+
+        tb_logger.attach(
+            trainer,
+            log_handler=OptimizerParamsHandler(engine.state.optimizer),
+            event_name=Events.ITERATION_STARTED
+        )
+
         engine.state.scheduler = torch.optim.lr_scheduler.StepLR(engine.state.optimizer, step_size=3, gamma=0.1)
         if input_checkpoint and load_optimizer:
             engine.state.optimizer.load_state_dict(input_checkpoint['optimizer'])
