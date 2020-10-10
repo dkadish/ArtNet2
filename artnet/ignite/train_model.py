@@ -39,7 +39,7 @@ def run(warmup_iterations=5000, batch_size=4, test_size=2000, epochs=10, log_int
         train_dataset_ann_file='~/bigdata/coco/annotations/instances_train2017.json',
         val_dataset_ann_file='~/bigdata/coco/annotations/instances_val2017.json', input_checkpoint='',
         load_optimizer=False, output_dir="/tmp/checkpoints", log_dir="/tmp/tensorboard_logs", lr=0.005, momentum=0.9,
-        weight_decay=0.0005, use_mask=True, use_toy_testing_data=False, backbone_name='resnet101'):
+        weight_decay=0.0005, use_mask=True, use_toy_testing_data=False, backbone_name='resnet101', num_workers=6):
     # Define train and test datasets
     train_loader, val_loader, labels_enum = get_data_loaders(train_dataset_ann_file,
                                                              val_dataset_ann_file,
@@ -263,6 +263,8 @@ if __name__ == "__main__":
                         help='use a small toy dataset to make sure things work')
     parser.add_argument("--backbone_name", type=str, default='resnet101',
                         help='which backbone to use. options are resnet101, resnet50, and shape-resnet50')
+    parser.add_argument("--num_workers", type=int, default=6,
+                        help='number of workers to use for data loading')
     args = parser.parse_args()
 
     if not os.path.exists(args.output_dir):

@@ -13,6 +13,7 @@ from artnet.ignite.utilities import safe_collate
 
 configuration_data = {'image_size': 512, 'mask_predictor_hidden_layer': 256}
 
+
 class CocoMask(CocoDetection):
     def __init__(self, root, annFile, transform=None, target_transform=None, transforms=None, use_mask=True):
         super(CocoMask, self).__init__(root, annFile, transforms, target_transform, transform)
@@ -49,14 +50,15 @@ class CocoMask(CocoDetection):
         return img, new_target
 
 
-def get_eval_data_loader(test_ann_file, batch_size, image_size, use_mask):
+def get_eval_data_loader(test_ann_file, batch_size, image_size, use_mask, num_workers=6):
     train_ann_file = None
     test_size = None
-    return get_data_loaders(train_ann_file, test_ann_file, batch_size, test_size, image_size, use_mask)
+    return get_data_loaders(train_ann_file, test_ann_file, batch_size, test_size, image_size, use_mask,
+                            num_workers=num_workers)
 
 
 def get_data_loaders(train_ann_file, test_ann_file, batch_size, test_size, image_size, use_mask,
-                     _use_toy_testing_set=False):
+                     _use_toy_testing_set=False, num_workers=6):
     # first, crate PyTorch dataset objects, for the train and validation data.
     dataset_test = CocoMask(
         root=Path.joinpath(Path(test_ann_file).parent.parent, test_ann_file.split('_')[1].split('.')[0]),
@@ -72,7 +74,7 @@ def get_data_loaders(train_ann_file, test_ann_file, batch_size, test_size, image
     else:
         dataset_val = dataset_test
 
-    val_loader = DataLoader(dataset_val, batch_size=batch_size, shuffle=False, num_workers=6,
+    val_loader = DataLoader(dataset_val, batch_size=batch_size, shuffle=False, num_workers=num_workers,
                             collate_fn=safe_collate, pin_memory=True)
 
     if train_ann_file is not None:  # This is just loading a testing set for evaluation, not a training set.
@@ -84,12 +86,11 @@ def get_data_loaders(train_ann_file, test_ann_file, batch_size, test_size, image
 
         labels_enumeration = dataset.coco.cats
 
-
         if _use_toy_testing_set:
             train_loader = DataLoader(dataset, batch_size=batch_size, sampler=SubsetRandomSampler(range(1000)),
-                                      num_workers=6, collate_fn=safe_collate, pin_memory=True)
+                                      num_workers=num_workers, collate_fn=safe_collate, pin_memory=True)
         else:
-            train_loader = DataLoader(dataset, batch_size=batch_size, shuffle=True, num_workers=6,
+            train_loader = DataLoader(dataset, batch_size=batch_size, shuffle=True, num_workers=num_workers,
                                       collate_fn=safe_collate, pin_memory=True)
 
         return train_loader, val_loader, labels_enumeration
