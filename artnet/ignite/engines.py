@@ -91,6 +91,8 @@ def prepare_batch(batch, device=None):
             print('Found {} degenerate boxes. Keeping {} boxes.'.format(len(to_remove.tolist()), len(list(to_keep))))
             pprint(boxes)
 
+    print('New batch: {} images, {} targets.'.format(len(images), len(targets)))
+
     return images, targets
 
 import tensorboard.program
