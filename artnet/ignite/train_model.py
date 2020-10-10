@@ -32,6 +32,7 @@ from .utilities import draw_debug_images, draw_mask, get_model_instance_segmenta
 
 logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger('artnet.ignite.train')
+logging.getLogger('ignite.engine.engine.Engine').setLevel(logging.INFO)
 
 
 def run(warmup_iterations=5000, batch_size=4, test_size=2000, epochs=10, log_interval=100, debug_images_interval=500,
