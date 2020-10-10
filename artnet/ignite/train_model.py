@@ -1,4 +1,5 @@
 import copy
+import logging
 import os
 from argparse import ArgumentParser, ArgumentDefaultsHelpFormatter
 from itertools import chain
@@ -6,7 +7,7 @@ from itertools import chain
 import numpy as np
 
 import torch
-from ignite.contrib.handlers import TensorboardLogger
+from ignite.contrib.handlers import TensorboardLogger, BasicTimeProfiler
 from ignite.contrib.handlers.tensorboard_logger import WeightsHistHandler, OptimizerParamsHandler, GradsHistHandler, \
     GradsScalarHandler
 from ignite.engine import Events, State
@@ -29,6 +30,9 @@ from .utilities import draw_debug_images, draw_mask, get_model_instance_segmenta
 
 # configuration_data = task.connect_configuration(configuration_data)
 
+logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+logger = logging.getLogger('artnet.ignite.train')
+
 
 def run(warmup_iterations=5000, batch_size=4, test_size=2000, epochs=10, log_interval=100, debug_images_interval=500,
         train_dataset_ann_file='~/bigdata/coco/annotations/instances_train2017.json',
@@ -47,30 +51,30 @@ def run(warmup_iterations=5000, batch_size=4, test_size=2000, epochs=10, log_int
     num_classes = max(labels_enum.keys()) + 1  # number of classes plus one for background class
     configuration_data['num_classes'] = num_classes
 
-    print('Training with {} classes...'.format(num_classes))
+    logger.info('Training with {} classes...'.format(num_classes))
     
     # Set the training device to GPU if available - if not set it to CPU
     device = torch.cuda.current_device() if torch.cuda.is_available() else torch.device('cpu')
     torch.backends.cudnn.benchmark = True if torch.cuda.is_available() else False  # optimization for fixed input size
 
     if use_mask:
-        print('Loading MaskRCNN Model...')
+        logger.info('Loading MaskRCNN Model...')
         model = get_model_instance_segmentation(num_classes, configuration_data.get('mask_predictor_hidden_layer'))
     else:
-        print('Loading FasterRCNN Model...')
+        logger.info('Loading FasterRCNN Model...')
         model = get_model_instance_detection(num_classes, backbone_name=backbone_name)
     iou_types = get_iou_types(model)
     
     # if there is more than one GPU, parallelize the model
     if torch.cuda.device_count() > 1:
-        print("{} GPUs were detected - we will use all of them".format(torch.cuda.device_count()))
+        logger.info("{} GPUs were detected - we will use all of them".format(torch.cuda.device_count()))
         model = torch.nn.DataParallel(model)
     
     # copy the model to each device
     model.to(device)
     
     if input_checkpoint:
-        print('Loading model checkpoint from '.format(input_checkpoint))
+        logger.info('Loading model checkpoint from '.format(input_checkpoint))
         input_checkpoint = torch.load(input_checkpoint, map_location=torch.device(device))
         model.load_state_dict(input_checkpoint['model'])
 
@@ -97,18 +101,13 @@ def run(warmup_iterations=5000, batch_size=4, test_size=2000, epochs=10, log_int
         event_name=Events.ITERATION_COMPLETED,
         log_handler=WeightsHistHandler(model)
     )
-    # Attach the logger to the trainer to log model's weights norm after each iteration
-    tb_logger.attach(
-        trainer,
-        event_name=Events.ITERATION_COMPLETED,
-        log_handler=GradsHistHandler(model)
-    )
-    # Attach the logger to the trainer to log model's weights norm after each iteration
-    tb_logger.attach(
-        trainer,
-        event_name=Events.ITERATION_COMPLETED,
-        log_handler=GradsScalarHandler(model, reduction=torch.norm)
-    )
+
+    profiler = BasicTimeProfiler()
+    profiler.attach(trainer)
+
+    @trainer.on(Events.EPOCH_COMPLETED)
+    def log_intermediate_results():
+        profiler.print_results(profiler.get_results())
 
     @trainer.on(Events.STARTED)
     def on_training_started(engine):
@@ -221,6 +220,8 @@ def run(warmup_iterations=5000, batch_size=4, test_size=2000, epochs=10, log_int
 
     trainer.run(train_loader, max_epochs=epochs)
     writer.close()
+
+    profiler.write_results('{}/time_profiling.csv'.format(output_dir))
 
 if __name__ == "__main__":
     parser = ArgumentParser(formatter_class=ArgumentDefaultsHelpFormatter)
