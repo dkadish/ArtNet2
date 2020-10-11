@@ -79,6 +79,7 @@ def run(warmup_iterations=5000, batch_size=4, test_size=2000, epochs=10, log_int
         input_checkpoint = torch.load(input_checkpoint, map_location=torch.device(device))
         model.load_state_dict(input_checkpoint['model'])
 
+    logger.debug('Initializing SummaryWriter...')
     if use_mask:
         comment = 'mask'
     else:
@@ -92,10 +93,13 @@ def run(warmup_iterations=5000, batch_size=4, test_size=2000, epochs=10, log_int
         'epochs': 10,
     }
 
+    logger.info('Creating Trainer...')
     # define Ignite's train and evaluation engine
     trainer = create_trainer(model, device)
+    logger.info('Creating Evaluator...')
     evaluator = create_evaluator(model, device)
 
+    logger.info('Initializing Tensorboard Logger...')
     tb_logger = TensorboardLogger(log_dir=log_dir)
     tb_logger.attach(
         trainer,
@@ -103,16 +107,19 @@ def run(warmup_iterations=5000, batch_size=4, test_size=2000, epochs=10, log_int
         log_handler=WeightsHistHandler(model)
     )
 
+    logger.info('Setting up profiler...')
     profiler = BasicTimeProfiler()
     profiler.attach(trainer)
 
     @trainer.on(Events.EPOCH_COMPLETED)
     def log_intermediate_results():
+        logger.info('Epoch Complete...')
         profiler.print_results(profiler.get_results())
 
     @trainer.on(Events.STARTED)
     def on_training_started(engine):
         # construct an optimizer
+        logger.info('Started Training...')
         params = [p for p in model.parameters() if p.requires_grad]
         engine.state.optimizer = torch.optim.SGD(params,
                                                  lr=lr,
@@ -132,6 +139,7 @@ def run(warmup_iterations=5000, batch_size=4, test_size=2000, epochs=10, log_int
     
     @trainer.on(Events.EPOCH_STARTED)
     def on_epoch_started(engine):
+        logger.info('Started Epoch...')
         model.train()
         engine.state.warmup_scheduler = None
         if engine.state.epoch == 1:
@@ -161,6 +169,7 @@ def run(warmup_iterations=5000, batch_size=4, test_size=2000, epochs=10, log_int
     
     @trainer.on(Events.EPOCH_COMPLETED)
     def on_epoch_completed(engine):
+        logger.info('Finished Epoch...')
         engine.state.scheduler.step()
         evaluator.run(val_loader)
         for res_type in evaluator.state.coco_evaluator.iou_types:
@@ -183,6 +192,7 @@ def run(warmup_iterations=5000, batch_size=4, test_size=2000, epochs=10, log_int
 
     @evaluator.on(Events.STARTED)
     def on_evaluation_started(engine):
+        logger.info('Started Evaluation...')
         model.eval()
         engine.state.coco_evaluator = CocoEvaluator(coco_api_val_dataset, iou_types)
 
@@ -206,6 +216,7 @@ def run(warmup_iterations=5000, batch_size=4, test_size=2000, epochs=10, log_int
 
     @evaluator.on(Events.COMPLETED)
     def on_evaluation_completed(engine):
+        logger.info('Finished Evaluation...')
         # gather the stats from all processes
         engine.state.coco_evaluator.synchronize_between_processes()
         
@@ -219,6 +230,7 @@ def run(warmup_iterations=5000, batch_size=4, test_size=2000, epochs=10, log_int
             'hparams/AP.75': np.mean(pr_75)
         })
 
+    logger.info('Running Trainer...')
     trainer.run(train_loader, max_epochs=epochs)
     writer.close()
 
