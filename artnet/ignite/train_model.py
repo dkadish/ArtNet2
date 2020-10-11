@@ -99,7 +99,7 @@ def run(warmup_iterations=5000, batch_size=4, test_size=2000, epochs=10, log_int
     tb_logger = TensorboardLogger(log_dir=log_dir)
     tb_logger.attach(
         trainer,
-        event_name=Events.ITERATION_COMPLETED,
+        event_name=Events.ITERATION_COMPLETED(every=200),
         log_handler=WeightsHistHandler(model)
     )
 
