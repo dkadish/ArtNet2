@@ -30,15 +30,16 @@ from .utilities import draw_debug_images, draw_mask, get_model_instance_segmenta
 
 # configuration_data = task.connect_configuration(configuration_data)
 
-logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger('artnet.ignite.train')
+logging.getLogger('ignite.engine.engine.Engine').setLevel(logging.INFO)
 
 
 def run(warmup_iterations=5000, batch_size=4, test_size=2000, epochs=10, log_interval=100, debug_images_interval=500,
         train_dataset_ann_file='~/bigdata/coco/annotations/instances_train2017.json',
         val_dataset_ann_file='~/bigdata/coco/annotations/instances_val2017.json', input_checkpoint='',
         load_optimizer=False, output_dir="/tmp/checkpoints", log_dir="/tmp/tensorboard_logs", lr=0.005, momentum=0.9,
-        weight_decay=0.0005, use_mask=True, use_toy_testing_data=False, backbone_name='resnet101'):
+        weight_decay=0.0005, use_mask=True, use_toy_testing_data=False, backbone_name='resnet101', num_workers=6):
     # Define train and test datasets
     train_loader, val_loader, labels_enum = get_data_loaders(train_dataset_ann_file,
                                                              val_dataset_ann_file,
@@ -58,16 +59,16 @@ def run(warmup_iterations=5000, batch_size=4, test_size=2000, epochs=10, log_int
     torch.backends.cudnn.benchmark = True if torch.cuda.is_available() else False  # optimization for fixed input size
 
     if use_mask:
-        logger.info('Loading MaskRCNN Model...')
+        logger.DEBUG('Loading MaskRCNN Model...')
         model = get_model_instance_segmentation(num_classes, configuration_data.get('mask_predictor_hidden_layer'))
     else:
-        logger.info('Loading FasterRCNN Model...')
+        logger.DEBUG('Loading FasterRCNN Model...')
         model = get_model_instance_detection(num_classes, backbone_name=backbone_name)
     iou_types = get_iou_types(model)
     
     # if there is more than one GPU, parallelize the model
     if torch.cuda.device_count() > 1:
-        logger.info("{} GPUs were detected - we will use all of them".format(torch.cuda.device_count()))
+        logger.DEBUG("{} GPUs were detected - we will use all of them".format(torch.cuda.device_count()))
         model = torch.nn.DataParallel(model)
     
     # copy the model to each device
@@ -78,6 +79,7 @@ def run(warmup_iterations=5000, batch_size=4, test_size=2000, epochs=10, log_int
         input_checkpoint = torch.load(input_checkpoint, map_location=torch.device(device))
         model.load_state_dict(input_checkpoint['model'])
 
+    logger.debug('Initializing SummaryWriter...')
     if use_mask:
         comment = 'mask'
     else:
@@ -91,27 +93,33 @@ def run(warmup_iterations=5000, batch_size=4, test_size=2000, epochs=10, log_int
         'epochs': 10,
     }
 
+    logger.DEBUG('Creating Trainer...')
     # define Ignite's train and evaluation engine
     trainer = create_trainer(model, device)
+    logger.DEBUG('Creating Evaluator...')
     evaluator = create_evaluator(model, device)
 
+    logger.DEBUG('Initializing Tensorboard Logger...')
     tb_logger = TensorboardLogger(log_dir=log_dir)
     tb_logger.attach(
         trainer,
-        event_name=Events.ITERATION_COMPLETED,
+        event_name=Events.ITERATION_COMPLETED(every=200),
         log_handler=WeightsHistHandler(model)
     )
 
+    logger.DEBUG('Setting up profiler...')
     profiler = BasicTimeProfiler()
     profiler.attach(trainer)
 
     @trainer.on(Events.EPOCH_COMPLETED)
     def log_intermediate_results():
+        logger.DEBUG('Epoch Complete...')
         profiler.print_results(profiler.get_results())
 
     @trainer.on(Events.STARTED)
     def on_training_started(engine):
         # construct an optimizer
+        logger.DEBUG('Started Training...')
         params = [p for p in model.parameters() if p.requires_grad]
         engine.state.optimizer = torch.optim.SGD(params,
                                                  lr=lr,
@@ -131,6 +139,7 @@ def run(warmup_iterations=5000, batch_size=4, test_size=2000, epochs=10, log_int
     
     @trainer.on(Events.EPOCH_STARTED)
     def on_epoch_started(engine):
+        logger.DEBUG('Started Epoch...')
         model.train()
         engine.state.warmup_scheduler = None
         if engine.state.epoch == 1:
@@ -160,6 +169,7 @@ def run(warmup_iterations=5000, batch_size=4, test_size=2000, epochs=10, log_int
     
     @trainer.on(Events.EPOCH_COMPLETED)
     def on_epoch_completed(engine):
+        logger.DEBUG('Finished Epoch...')
         engine.state.scheduler.step()
         evaluator.run(val_loader)
         for res_type in evaluator.state.coco_evaluator.iou_types:
@@ -182,6 +192,7 @@ def run(warmup_iterations=5000, batch_size=4, test_size=2000, epochs=10, log_int
 
     @evaluator.on(Events.STARTED)
     def on_evaluation_started(engine):
+        logger.DEBUG('Started Evaluation...')
         model.eval()
         engine.state.coco_evaluator = CocoEvaluator(coco_api_val_dataset, iou_types)
 
@@ -205,6 +216,7 @@ def run(warmup_iterations=5000, batch_size=4, test_size=2000, epochs=10, log_int
 
     @evaluator.on(Events.COMPLETED)
     def on_evaluation_completed(engine):
+        logger.DEBUG('Finished Evaluation...')
         # gather the stats from all processes
         engine.state.coco_evaluator.synchronize_between_processes()
         
@@ -218,6 +230,7 @@ def run(warmup_iterations=5000, batch_size=4, test_size=2000, epochs=10, log_int
             'hparams/AP.75': np.mean(pr_75)
         })
 
+    logger.DEBUG('Running Trainer...')
     trainer.run(train_loader, max_epochs=epochs)
     writer.close()
 
@@ -262,6 +275,8 @@ if __name__ == "__main__":
                         help='use a small toy dataset to make sure things work')
     parser.add_argument("--backbone_name", type=str, default='resnet101',
                         help='which backbone to use. options are resnet101, resnet50, and shape-resnet50')
+    parser.add_argument("--num_workers", type=int, default=6,
+                        help='number of workers to use for data loading')
     args = parser.parse_args()
 
     if not os.path.exists(args.output_dir):

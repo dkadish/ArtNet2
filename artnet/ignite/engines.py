@@ -13,6 +13,16 @@ def create_trainer(model, device):
         images, targets = copy.deepcopy(batch)
         images_model, targets_model = prepare_batch(batch, device=device)
 
+        # print('Images: ')
+        # for i, img in enumerate(images_model):
+        #     print('Image {}: {}'.format(i, type(img)))
+        #     print('Image {}: {}'.format(i, img.shape))
+        #
+        # print('Targets: ')
+        # for i, tgt in enumerate(targets_model):
+        #     print('Target {}: {}'.format(i, type(tgt)))
+        #     print('Target {}: {}'.format(i, tgt.shape))
+
         loss_dict = model(images_model, targets_model)
         losses = sum(loss for loss in loss_dict.values())
 
@@ -91,7 +101,7 @@ def prepare_batch(batch, device=None):
             print('Found {} degenerate boxes. Keeping {} boxes.'.format(len(to_remove.tolist()), len(list(to_keep))))
             pprint(boxes)
 
-    print('New batch: {} images, {} targets.'.format(len(images), len(targets)))
+    # print('New batch: {} images, {} targets.'.format(len(images), len(targets)))
 
     return images, targets
 
