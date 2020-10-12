@@ -120,7 +120,7 @@ def run(warmup_iterations=5000, batch_size=4, test_size=2000, epochs=10, log_int
         coco_ap_05.attach(eng, "AP0.5")
         coco_ap_075.attach(eng, "AP0.75")
 
-        writer.attach(
+        tb_logger.attach(
             eng,
             log_handler=OutputHandler(
                 tag=stage,
