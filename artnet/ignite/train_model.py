@@ -178,7 +178,7 @@ def run(warmup_iterations=5000, batch_size=4, test_size=2000, epochs=10, log_int
                 writer.add_scalar("loss/{}".format(k), v.item(), engine.state.iteration)
             writer.add_scalar("loss/total_loss", sum(loss for loss in loss_dict_reduced.values()).item(),
                               engine.state.iteration)
-            writer.add_scalar("learning rate/lr", engine.state.optimizer.param_groups[0]['lr'], engine.state.iteration)
+            writer.add_scalar("learning_rate/lr", engine.state.optimizer.param_groups[0]['lr'], engine.state.iteration)
 
         if engine.state.iteration % debug_images_interval == 0:
             for n, debug_image in enumerate(draw_debug_images(images, targets)):
