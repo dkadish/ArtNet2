@@ -71,7 +71,7 @@ def create_evaluator(model, device):
             res = {target["image_id"].item(): output for target, output in zip(targets, outputs)}
 
             # print('Evaluating iou_types: {}'.format(engine.state.coco_evaluator.iou_types))
-            engine.state.coco_evaluator.update(res)
+            # engine.state.coco_evaluator.update(res)
 
         except ValueError as e:
             print('Warning. Empty batch. Returning empty images, targets lists.')
