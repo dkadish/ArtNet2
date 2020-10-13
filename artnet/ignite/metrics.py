@@ -38,6 +38,7 @@ class CocoMetricBase(Metric):
             self.coco_evaluator.update(res)
         except TypeError as e:
             # The model/target produced no bounding boxes and cannot be evaluated for this iteration.
+            print('The model/target produced no bounding boxes and cannot be evaluated for this iteration.')
             pass
 
         # indices = torch.argmax(y_pred, dim=1)

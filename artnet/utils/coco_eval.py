@@ -47,7 +47,12 @@ class CocoEvaluator(object):
 
     def synchronize_between_processes(self):
         for iou_type in self.iou_types:
-            self.eval_imgs[iou_type] = np.concatenate(self.eval_imgs[iou_type], 2)
+            #ValueError: need at least one array to concatenate
+            try:
+                self.eval_imgs[iou_type] = np.concatenate(self.eval_imgs[iou_type], 2)
+            except ValueError as e:
+                print('ValueError in synchronize_between_processes. Empty eval_imgs.')
+                self.eval_imgs[iou_type] = np.empty([0, 0, 0])
             create_common_coco_eval(self.coco_eval[iou_type], self.img_ids, self.eval_imgs[iou_type])
 
     def accumulate(self):
