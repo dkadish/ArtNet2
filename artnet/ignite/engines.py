@@ -23,11 +23,13 @@ def create_trainer(model, device):
         #     print('Target {}: {}'.format(i, type(tgt)))
         #     print('Target {}: {}'.format(i, tgt.shape))
 
+        model.eval()
         with torch.no_grad():
             outputs = model(images_model)
 
         outputs = [{k: v.to(device) for k, v in t.items()} for t in outputs]
 
+        model.train()
         loss_dict = model(images_model, targets_model)
         losses = sum(loss for loss in loss_dict.values())
 
