@@ -23,6 +23,11 @@ def create_trainer(model, device):
         #     print('Target {}: {}'.format(i, type(tgt)))
         #     print('Target {}: {}'.format(i, tgt.shape))
 
+        with torch.no_grad():
+            outputs = model(images_model)
+
+        outputs = [{k: v.to(device) for k, v in t.items()} for t in outputs]
+
         loss_dict = model(images_model, targets_model)
         losses = sum(loss for loss in loss_dict.values())
 
@@ -48,7 +53,7 @@ def create_trainer(model, device):
 
         images_model = targets_model = None
 
-        return images, targets, loss_dict_reduced
+        return images, targets, outputs, loss_dict_reduced
     return Engine(update_model)
 
 

@@ -32,12 +32,14 @@ class CocoMetricBase(Metric):
     @reinit__is_reduced
     def update(self, output):  # ITERATION_COMPLETED
         # y_pred, y = output
-        images, targets, res = output
+        images, targets, predictions, loss = output
 
-        print('RES: ', res)
+        # res = {'loss_classifier': tensor(0.0994, device='cuda:0', grad_fn=<NllLossBackward>), 'loss_box_reg': tensor(0.1329, device='cuda:0', grad_fn=<DivBackward0>), 'loss_mask': tensor(0.4306, device='cuda:0', grad_fn=<BinaryCrossEntropyWithLogitsBackward>), 'loss_objectness': tensor(0.0621, device='cuda:0', grad_fn=<BinaryCrossEntropyWithLogitsBackward>), 'loss_rpn_box_reg': tensor(0.0173, device='cuda:0', grad_fn=<DivBackward0>)}
+
+        print('RES: ', predictions)
 
         try:
-            self.coco_evaluator.update(res)
+            self.coco_evaluator.update(predictions)
             print('Successfully updated coco_evaluator.')
         except TypeError as e:
             # The model/target produced no bounding boxes and cannot be evaluated for this iteration.
