@@ -34,8 +34,11 @@ class CocoMetricBase(Metric):
         # y_pred, y = output
         images, targets, res = output
 
+        print('RES: ', res)
+
         try:
             self.coco_evaluator.update(res)
+            print('Successfully updated coco_evaluator.')
         except TypeError as e:
             # The model/target produced no bounding boxes and cannot be evaluated for this iteration.
             print('The model/target produced no bounding boxes and cannot be evaluated for this iteration.')
