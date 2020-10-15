@@ -32,7 +32,7 @@ class CocoMetricBase(Metric):
     @reinit__is_reduced
     def update(self, output):  # ITERATION_COMPLETED
         # y_pred, y = output
-        images, targets, predictions, loss = output
+        images, targets, predictions = output
 
         # res = {'loss_classifier': tensor(0.0994, device='cuda:0', grad_fn=<NllLossBackward>), 'loss_box_reg': tensor(0.1329, device='cuda:0', grad_fn=<DivBackward0>), 'loss_mask': tensor(0.4306, device='cuda:0', grad_fn=<BinaryCrossEntropyWithLogitsBackward>), 'loss_objectness': tensor(0.0621, device='cuda:0', grad_fn=<BinaryCrossEntropyWithLogitsBackward>), 'loss_rpn_box_reg': tensor(0.0173, device='cuda:0', grad_fn=<DivBackward0>)}
 
