@@ -112,7 +112,7 @@ def run(warmup_iterations=5000, batch_size=4, test_size=2000, epochs=10, log_int
     profiler = BasicTimeProfiler()
     profiler.attach(trainer)
 
-    for eng, stage in zip([trainer, evaluator], ['training', 'evaluation']):
+    for eng, stage in zip([evaluator], ['evaluation']):
         coco_ap = CocoAP(coco_api_val_dataset, iou_types)
         coco_ap_05 = CocoAP5(coco_api_val_dataset, iou_types)
         coco_ap_075 = CocoAP75(coco_api_val_dataset, iou_types)
