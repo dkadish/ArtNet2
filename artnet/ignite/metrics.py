@@ -19,7 +19,12 @@ class CocoMetricBase(Metric):
         self.iou_types = iou_types
         # self.coco_evaluator = CocoEvaluator(coco_api_val_dataset, iou_types)
 
+        self.ap = 0
+        self.ap5 = 0
+        self.ap75 = 0
+
         super(CocoMetricBase, self).__init__(output_transform=output_transform)
+
 
     @reinit__is_reduced
     def reset(self):  # EPOCH_STARTED
@@ -73,6 +78,10 @@ class CocoMetricBase(Metric):
             ap, ap5, ap75 = self.coco_evaluator.coco_eval[res_type].stats[:3]
             # writer.add_scalar("validation-{}/average precision 0_5".format(res_type), average_precision_05,
             #                   engine.state.iteration)
+
+        self.ap = ap
+        self.ap5 = ap5
+        self.ap75 = ap75
 
         return ap, ap5, ap75
 

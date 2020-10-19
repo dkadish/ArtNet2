@@ -37,6 +37,20 @@ def run(warmup_iterations=5000, batch_size=4, test_size=2000, epochs=10, log_int
         load_optimizer=False, output_dir="/tmp/checkpoints", log_dir="/tmp/tensorboard_logs", lr=0.005, momentum=0.9,
         weight_decay=0.0005, use_mask=True, use_toy_testing_data=False, backbone_name='resnet101', num_workers=6,
         trainable_layers=3):
+
+    # Write hyperparams
+    hparam_dict = {
+        'warmup_iterations': warmup_iterations,
+        'batch_size': batch_size,
+        'test_size': test_size,
+        'epochs': epochs,
+        'trainable_layers': trainable_layers,
+        'load_optimizer': load_optimizer,
+        'lr': lr,
+        'momentum': momentum,
+        'weight_decay': weight_decay,
+    }
+
     # Define train and test datasets
     train_loader, val_loader, labels_enum = get_data_loaders(train_dataset_ann_file,
                                                              val_dataset_ann_file,
@@ -84,13 +98,6 @@ def run(warmup_iterations=5000, batch_size=4, test_size=2000, epochs=10, log_int
         comment = 'mask'
     else:
         comment = 'box-{}'.format(backbone_name)
-    # Write hyperparams
-    hparam_dict = {
-        'warmup_iterations': 5000,
-        'batch_size': 4,
-        'test_size': 2000,
-        'epochs': 10,
-    }
 
     logger.debug('Creating Trainer...')
     # define Ignite's train and evaluation engine
@@ -111,23 +118,22 @@ def run(warmup_iterations=5000, batch_size=4, test_size=2000, epochs=10, log_int
     profiler = BasicTimeProfiler()
     profiler.attach(trainer)
 
-    for eng, stage in zip([evaluator], ['evaluation']):
-        coco_ap = CocoAP(coco_api_val_dataset, iou_types)
-        coco_ap_05 = CocoAP5(coco_api_val_dataset, iou_types)
-        coco_ap_075 = CocoAP75(coco_api_val_dataset, iou_types)
-        coco_ap.attach(eng, "AP")
-        coco_ap_05.attach(eng, "AP0.5")
-        coco_ap_075.attach(eng, "AP0.75")
+    coco_ap = CocoAP(coco_api_val_dataset, iou_types)
+    coco_ap_05 = CocoAP5(coco_api_val_dataset, iou_types)
+    coco_ap_075 = CocoAP75(coco_api_val_dataset, iou_types)
+    coco_ap.attach(evaluator, "AP")
+    coco_ap_05.attach(evaluator, "AP0.5")
+    coco_ap_075.attach(evaluator, "AP0.75")
 
-        tb_logger.attach(
-            eng,
-            log_handler=OutputHandler(
-                tag=stage,
-                metric_names=['AP', 'AP0.5', 'AP0.75'],
-                global_step_transform=global_step_from_engine(trainer)
-            ),
-            event_name=Events.EPOCH_COMPLETED
-        )
+    tb_logger.attach(
+        evaluator,
+        log_handler=OutputHandler(
+            tag='evaluation',
+            metric_names=['AP', 'AP0.5', 'AP0.75'],
+            global_step_transform=global_step_from_engine(trainer)
+        ),
+        event_name=Events.EPOCH_COMPLETED
+    )
 
     @trainer.on(Events.EPOCH_COMPLETED)
     def log_intermediate_results():
@@ -209,6 +215,15 @@ def run(warmup_iterations=5000, batch_size=4, test_size=2000, epochs=10, log_int
         print('Model checkpoint from epoch {} was saved at {}'.format(engine.state.epoch, checkpoint_path))
         checkpoint = None
         evaluator.state = State()
+
+    @trainer.on(Events.COMPLETED)
+    def on_training_completed(engine):
+        logger.debug('Finished Training...')
+        writer.add_hparams(hparam_dict, {
+            'hparams/AP.5': coco_ap.ap,
+            'hparams/AP.5': coco_ap_05.ap5,
+            'hparams/AP.75': coco_ap_075.ap75
+        })
 
     @evaluator.on(Events.STARTED)
     def on_evaluation_started(engine):
@@ -301,6 +316,8 @@ if __name__ == "__main__":
                         help='which backbone to use. options are resnet101, resnet50, and shape-resnet50')
     parser.add_argument("--num_workers", type=int, default=6,
                         help='number of workers to use for data loading')
+    parser.add_argument("--trainable_layers", type=int, default=3,
+                        help='number of layers to train (1-5)')
     args = parser.parse_args()
 
     if not os.path.exists(args.output_dir):
