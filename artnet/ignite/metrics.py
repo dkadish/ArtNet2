@@ -36,11 +36,10 @@ class CocoMetricBase(Metric):
 
         # res = {'loss_classifier': tensor(0.0994, device='cuda:0', grad_fn=<NllLossBackward>), 'loss_box_reg': tensor(0.1329, device='cuda:0', grad_fn=<DivBackward0>), 'loss_mask': tensor(0.4306, device='cuda:0', grad_fn=<BinaryCrossEntropyWithLogitsBackward>), 'loss_objectness': tensor(0.0621, device='cuda:0', grad_fn=<BinaryCrossEntropyWithLogitsBackward>), 'loss_rpn_box_reg': tensor(0.0173, device='cuda:0', grad_fn=<DivBackward0>)}
 
-        print('RES: ', predictions)
+        # print('RES: ', predictions)
 
         try:
             self.coco_evaluator.update(predictions)
-            print('Successfully updated coco_evaluator.')
         except TypeError as e:
             # The model/target produced no bounding boxes and cannot be evaluated for this iteration.
             print('The model/target produced no bounding boxes and cannot be evaluated for this iteration.')

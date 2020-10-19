@@ -4,7 +4,6 @@ import os
 from argparse import ArgumentParser, ArgumentDefaultsHelpFormatter
 from itertools import chain
 
-import numpy as np
 import torch
 from ignite.contrib.handlers import TensorboardLogger, BasicTimeProfiler
 from ignite.contrib.handlers.tensorboard_logger import WeightsHistHandler, OptimizerParamsHandler, OutputHandler
@@ -15,10 +14,8 @@ from artnet.ignite.metrics import CocoAP, CocoAP75, CocoAP5
 from .data import get_data_loaders, configuration_data
 from .engines import create_trainer, create_evaluator
 from .utilities import draw_debug_images, draw_mask, get_model_instance_segmentation, get_iou_types, \
-    get_model_instance_detection
-from ..plot import get_pr_levels
+    get_model_instance_detection, draw_boxes
 from ..utils import utils
-from ..utils.coco_eval import CocoEvaluator
 from ..utils.coco_utils import convert_to_coco_api
 
 # import torch.multiprocessing
@@ -34,11 +31,12 @@ logger = logging.getLogger('artnet.ignite.train')
 logging.getLogger('ignite.engine.engine.Engine').setLevel(logging.INFO)
 
 
-def run(warmup_iterations=5000, batch_size=4, test_size=2000, epochs=10, log_interval=100, debug_images_interval=500,
+def run(warmup_iterations=5000, batch_size=4, test_size=2000, epochs=10, log_interval=100, debug_images_interval=30,
         train_dataset_ann_file='~/bigdata/coco/annotations/instances_train2017.json',
         val_dataset_ann_file='~/bigdata/coco/annotations/instances_val2017.json', input_checkpoint='',
         load_optimizer=False, output_dir="/tmp/checkpoints", log_dir="/tmp/tensorboard_logs", lr=0.005, momentum=0.9,
-        weight_decay=0.0005, use_mask=True, use_toy_testing_data=False, backbone_name='resnet101', num_workers=6):
+        weight_decay=0.0005, use_mask=True, use_toy_testing_data=False, backbone_name='resnet101', num_workers=6,
+        trainable_layers=3):
     # Define train and test datasets
     train_loader, val_loader, labels_enum = get_data_loaders(train_dataset_ann_file,
                                                              val_dataset_ann_file,
@@ -46,7 +44,8 @@ def run(warmup_iterations=5000, batch_size=4, test_size=2000, epochs=10, log_int
                                                              test_size,
                                                              configuration_data.get('image_size'),
                                                              use_mask=use_mask,
-                                                             _use_toy_testing_set=use_toy_testing_data)
+                                                             _use_toy_testing_set=use_toy_testing_data,
+                                                             num_workers=num_workers)
     val_dataset = list(chain.from_iterable(
         zip(*copy.deepcopy(batch)) for batch in iter(val_loader)))  # TODO Figure out what this does and use deepcopy.
     coco_api_val_dataset = convert_to_coco_api(val_dataset)
@@ -64,7 +63,7 @@ def run(warmup_iterations=5000, batch_size=4, test_size=2000, epochs=10, log_int
         model = get_model_instance_segmentation(num_classes, configuration_data.get('mask_predictor_hidden_layer'))
     else:
         logger.debug('Loading FasterRCNN Model...')
-        model = get_model_instance_detection(num_classes, backbone_name=backbone_name)
+        model = get_model_instance_detection(num_classes, backbone_name=backbone_name, trainable_layers=trainable_layers)
     iou_types = get_iou_types(model)
 
     # if there is more than one GPU, parallelize the model
@@ -225,6 +224,7 @@ def run(warmup_iterations=5000, batch_size=4, test_size=2000, epochs=10, log_int
 
         if engine.state.iteration % debug_images_interval == 0:
             for n, debug_image in enumerate(draw_debug_images(images, targets, results)):
+                print('Drawing debug image "evaluation/image_{}_{}"'.format(engine.state.iteration, n))
                 writer.add_image("evaluation/image_{}_{}".format(engine.state.iteration, n),
                                  debug_image, trainer.state.iteration, dataformats='HWC')
                 if 'masks' in targets[n]:
@@ -247,7 +247,7 @@ def run(warmup_iterations=5000, batch_size=4, test_size=2000, epochs=10, log_int
         # engine.state.coco_evaluator.summarize()
         #
         # pr_50, pr_75 = get_pr_levels(engine.state.coco_evaluator.coco_eval['bbox'])
-        #TODO Bring this back
+        # TODO Bring this back
         # writer.add_hparams(hparam_dict, {
         #     'hparams/AP.5': np.mean(pr_50),
         #     'hparams/AP.75': np.mean(pr_75)
