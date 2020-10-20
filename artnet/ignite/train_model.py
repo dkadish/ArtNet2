@@ -41,7 +41,7 @@ def run(warmup_iterations=5000, batch_size=4, test_size=2000, epochs=10, log_int
     # Write hyperparams
     hparam_dict = {
         'warmup_iterations': warmup_iterations,
-        'batch_size': batch_size,
+        'training_batch_size': batch_size,
         'test_size': test_size,
         'epochs': epochs,
         'trainable_layers': trainable_layers,
@@ -220,7 +220,7 @@ def run(warmup_iterations=5000, batch_size=4, test_size=2000, epochs=10, log_int
     def on_training_completed(engine):
         logger.debug('Finished Training...')
         writer.add_hparams(hparam_dict, {
-            'hparams/AP.5': coco_ap.ap,
+            'hparams/AP': coco_ap.ap,
             'hparams/AP.5': coco_ap_05.ap5,
             'hparams/AP.75': coco_ap_075.ap75
         })
@@ -239,14 +239,14 @@ def run(warmup_iterations=5000, batch_size=4, test_size=2000, epochs=10, log_int
 
         if engine.state.iteration % debug_images_interval == 0:
             for n, debug_image in enumerate(draw_debug_images(images, targets, results)):
-                print('Drawing debug image "evaluation/image_{}_{}"'.format(engine.state.iteration, n))
+                print('Drawing debug image "validation/image_{}_{}"'.format(engine.state.iteration, n))
                 writer.add_image("evaluation/image_{}_{}".format(engine.state.iteration, n),
                                  debug_image, trainer.state.iteration, dataformats='HWC')
                 if 'masks' in targets[n]:
-                    writer.add_image("evaluation/image_{}_{}_mask".format(engine.state.iteration, n),
+                    writer.add_image("validation/image_{}_{}_mask".format(engine.state.iteration, n),
                                      draw_mask(targets[n]), trainer.state.iteration, dataformats='HW')
                     curr_image_id = int(targets[n]['image_id'])
-                    writer.add_image("evaluation/image_{}_{}_predicted_mask".format(engine.state.iteration, n),
+                    writer.add_image("validation/image_{}_{}_predicted_mask".format(engine.state.iteration, n),
                                      draw_mask(results[curr_image_id]).squeeze(), trainer.state.iteration,
                                      dataformats='HW')
         images = targets = results = engine.state.output = None
@@ -287,7 +287,7 @@ if __name__ == "__main__":
                         help='number of epochs to train')
     parser.add_argument('--log_interval', type=int, default=100,
                         help='how many batches to wait before logging training status')
-    parser.add_argument('--debug_images_interval', type=int, default=500,
+    parser.add_argument('--debug_images_interval', type=int, default=30,
                         help='how many batches to wait before logging debug images')
     parser.add_argument('--train_dataset_ann_file', type=str,
                         default='./annotations/instances_train2017.json',

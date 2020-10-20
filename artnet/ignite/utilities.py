@@ -56,6 +56,12 @@ def draw_mask(target):
     masks_out = masks_sum + 25*(masks_sum > 0)
     return (masks_out*int(255/masks_out.max())).astype('uint8')
 
+# def draw_boxes(target):
+#     #FIXME THIS!
+#     masks = [channel*label for channel, label in zip(target['masks'].cpu().numpy(), target['labels'].cpu().numpy())]
+#     masks_sum = sum(masks)
+#     masks_out = masks_sum + 25*(masks_sum > 0)
+#     return (masks_out*int(255/masks_out.max())).astype('uint8')
 
 
 def get_model_instance_segmentation(num_classes, hidden_layer, pretrained=True, trainable_backbone_layers=3):

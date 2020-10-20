@@ -45,7 +45,7 @@ class CocoMetricBase(Metric):
 
         try:
             self.coco_evaluator.update(predictions)
-        except TypeError as e:
+        except (TypeError, KeyError) as e:
             # The model/target produced no bounding boxes and cannot be evaluated for this iteration.
             print('The model/target produced no bounding boxes and cannot be evaluated for this iteration.')
             pass
