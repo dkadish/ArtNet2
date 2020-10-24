@@ -2,29 +2,24 @@ import os
 from argparse import ArgumentParser, ArgumentDefaultsHelpFormatter
 from itertools import chain
 
-import numpy as np
 import torch
 from ignite.contrib.handlers import TensorboardLogger
 from ignite.contrib.handlers.tensorboard_logger import OutputHandler
-from ignite.engine import Events, State
+from ignite.engine import Events
 from ignite.handlers import global_step_from_engine
-from torch.utils.tensorboard import SummaryWriter
 
 from .data import get_eval_data_loader, configuration_data
 from .engines import create_evaluator
+from .metrics import CocoAP, CocoAP75, CocoAP5
 from .utilities import draw_debug_images, draw_mask, get_model_instance_segmentation, get_iou_types, \
     get_model_instance_detection
-from .metrics import CocoAP, CocoAP75, CocoAP5
-from ..plot import get_pr_levels, plot_pr_curve_tensorboard
 from ..utils import utils
-from ..utils.coco_eval import CocoEvaluator
 from ..utils.coco_utils import convert_to_coco_api
 
 
 def run(batch_size=1, log_interval=50, debug_images_interval=10,
         val_dataset_ann_file='~/bigdata/coco/annotations/instances_val2017.json', input_checkpoint='',
         log_dir="/tmp/tensorboard_logs", use_mask=True, backbone_name='resnet101'):
-
     hparam_dict = {
         # 'warmup_iterations': warmup_iterations,
         'batch_size': batch_size,
@@ -142,6 +137,8 @@ def run(batch_size=1, log_interval=50, debug_images_interval=10,
             'hparams/AP.5': coco_ap_05.ap5,
             'hparams/AP.75': coco_ap_075.ap75
         })
+
+        coco_ap.write_tensorboard_pr_curve(writer)
 
     # evaluator.state = State()
     evaluator.run(val_loader)

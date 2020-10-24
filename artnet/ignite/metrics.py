@@ -2,6 +2,7 @@
 from ignite.metrics import Metric
 from ignite.metrics.metric import reinit__is_reduced
 
+from artnet.plot import get_pr_levels, plot_pr_curve_tensorboard
 from artnet.utils.coco_eval import CocoEvaluator
 
 
@@ -85,6 +86,9 @@ class CocoMetricBase(Metric):
 
         return ap, ap5, ap75
 
+    def write_tensorboard_pr_curve(self, writer):
+        pr_50, pr_75 = get_pr_levels(self.coco_evaluator)
+        plot_pr_curve_tensorboard(pr_50, pr_75, writer)
 
 class CocoAP(CocoMetricBase):
     def compute(self):
