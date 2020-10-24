@@ -1,4 +1,5 @@
 import os
+import random
 from operator import add
 from pathlib import Path
 
@@ -58,7 +59,7 @@ def get_eval_data_loader(test_ann_file, batch_size, image_size, use_mask, num_wo
 
 
 def get_data_loaders(train_ann_file, test_ann_file, batch_size, test_size, image_size, use_mask,
-                     _use_toy_testing_set=False, num_workers=6):
+                     _use_toy_testing_set=False, num_workers=6, train_set_size=None):
     # first, crate PyTorch dataset objects, for the train and validation data.
     root = Path.joinpath(Path(test_ann_file).parent.parent, test_ann_file.split('_')[1].split('.')[0])
     print('Loading validation image files from {}'.format(root))
@@ -91,6 +92,15 @@ def get_data_loaders(train_ann_file, test_ann_file, batch_size, test_size, image
         if _use_toy_testing_set:
             train_loader = DataLoader(dataset, batch_size=batch_size, sampler=SubsetRandomSampler(range(1000)),
                                       num_workers=num_workers, collate_fn=safe_collate, pin_memory=True)
+        elif train_set_size is not None:
+            if train_set_size > len(dataset):
+                raise ValueError(
+                    'The size of the training set ({}) must be smaller than the total size of the dataset ({}).'.format(
+                        train_set_size, len(dataset)))
+            srs = SubsetRandomSampler(random.sample(range(len(dataset)), k=train_set_size))
+            train_loader = DataLoader(dataset, batch_size=batch_size, sampler=srs,
+                                      num_workers=num_workers,
+                                      collate_fn=safe_collate, pin_memory=True)
         else:
             train_loader = DataLoader(dataset, batch_size=batch_size, shuffle=True, num_workers=num_workers,
                                       collate_fn=safe_collate, pin_memory=True)

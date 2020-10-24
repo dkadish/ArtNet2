@@ -36,7 +36,7 @@ def run(warmup_iterations=5000, batch_size=4, test_size=2000, epochs=10, log_int
         val_dataset_ann_file='~/bigdata/coco/annotations/instances_val2017.json', input_checkpoint='',
         load_optimizer=False, output_dir="/tmp/checkpoints", log_dir="/tmp/tensorboard_logs", lr=0.005, momentum=0.9,
         weight_decay=0.0005, use_mask=True, use_toy_testing_data=False, backbone_name='resnet101', num_workers=6,
-        trainable_layers=3):
+        trainable_layers=3, train_set_size=None):
 
     # Write hyperparams
     hparam_dict = {
@@ -59,7 +59,13 @@ def run(warmup_iterations=5000, batch_size=4, test_size=2000, epochs=10, log_int
                                                              configuration_data.get('image_size'),
                                                              use_mask=use_mask,
                                                              _use_toy_testing_set=use_toy_testing_data,
-                                                             num_workers=num_workers)
+                                                             num_workers=num_workers,
+                                                             train_set_size=train_set_size)
+
+    # Hparams
+    hparam_dict['training_set_size'] = len(train_loader) * batch_size
+    hparam_dict['validation_set_size'] = len(val_loader) * batch_size
+
     val_dataset = list(chain.from_iterable(
         zip(*copy.deepcopy(batch)) for batch in iter(val_loader)))  # TODO Figure out what this does and use deepcopy.
     coco_api_val_dataset = convert_to_coco_api(val_dataset)
@@ -224,6 +230,7 @@ def run(warmup_iterations=5000, batch_size=4, test_size=2000, epochs=10, log_int
             'hparams/AP.5': coco_ap_05.ap5,
             'hparams/AP.75': coco_ap_075.ap75
         })
+        logger.debug('Wrote hparams...')
 
     @evaluator.on(Events.STARTED)
     def on_evaluation_started(engine):
@@ -318,6 +325,8 @@ if __name__ == "__main__":
                         help='number of workers to use for data loading')
     parser.add_argument("--trainable_layers", type=int, default=3,
                         help='number of layers to train (1-5)')
+    parser.add_argument("--train_set_size", type=int, default=None,
+                        help='number of images in the training data')
     args = parser.parse_args()
 
     if not os.path.exists(args.output_dir):
