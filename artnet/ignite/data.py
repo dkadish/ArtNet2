@@ -60,8 +60,10 @@ def get_eval_data_loader(test_ann_file, batch_size, image_size, use_mask, num_wo
 def get_data_loaders(train_ann_file, test_ann_file, batch_size, test_size, image_size, use_mask,
                      _use_toy_testing_set=False, num_workers=6):
     # first, crate PyTorch dataset objects, for the train and validation data.
+    root = Path.joinpath(Path(test_ann_file).parent.parent, test_ann_file.split('_')[1].split('.')[0])
+    print('Loading validation image files from {}'.format(root))
     dataset_test = CocoMask(
-        root=Path.joinpath(Path(test_ann_file).parent.parent, test_ann_file.split('_')[1].split('.')[0]),
+        root=root,
         annFile=test_ann_file,
         transforms=get_transform(train=False, image_size=image_size),
         use_mask=use_mask)

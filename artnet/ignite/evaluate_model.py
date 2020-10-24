@@ -2,24 +2,36 @@ import os
 from argparse import ArgumentParser, ArgumentDefaultsHelpFormatter
 from itertools import chain
 
-import numpy as np
 import torch
-from ignite.engine import Events, State
-from torch.utils.tensorboard import SummaryWriter
+from ignite.contrib.handlers import TensorboardLogger
+from ignite.contrib.handlers.tensorboard_logger import OutputHandler
+from ignite.engine import Events
+from ignite.handlers import global_step_from_engine
 
 from .data import get_eval_data_loader, configuration_data
 from .engines import create_evaluator
+from .metrics import CocoAP, CocoAP75, CocoAP5
 from .utilities import draw_debug_images, draw_mask, get_model_instance_segmentation, get_iou_types, \
     get_model_instance_detection
-from ..plot import get_pr_levels, plot_pr_curve_tensorboard
 from ..utils import utils
-from ..utils.coco_eval import CocoEvaluator
 from ..utils.coco_utils import convert_to_coco_api
 
 
-def run(batch_size=1, log_interval=100, debug_images_interval=500,
+def run(batch_size=1, log_interval=50, debug_images_interval=10,
         val_dataset_ann_file='~/bigdata/coco/annotations/instances_val2017.json', input_checkpoint='',
         log_dir="/tmp/tensorboard_logs", use_mask=True, backbone_name='resnet101'):
+    hparam_dict = {
+        # 'warmup_iterations': warmup_iterations,
+        'batch_size': batch_size,
+        # 'test_size': test_size,
+        # 'epochs': epochs,
+        # 'trainable_layers': trainable_layers,
+        # 'load_optimizer': load_optimizer,
+        # 'lr': lr,
+        # 'momentum': momentum,
+        # 'weight_decay': weight_decay,
+    }
+
     # Define train and test datasets
     val_loader, labels_enum = get_eval_data_loader(
         val_dataset_ann_file,
@@ -60,15 +72,33 @@ def run(batch_size=1, log_interval=100, debug_images_interval=500,
         comment = 'mask'
     else:
         comment = 'box-{}'.format(backbone_name)
-    writer = SummaryWriter(log_dir=log_dir, comment=comment)
+    tb_logger = TensorboardLogger(log_dir=log_dir, comment=comment)
+    writer = tb_logger.writer
 
     # define Ignite's train and evaluation engine
     evaluator = create_evaluator(model, device)
 
+    coco_ap = CocoAP(coco_api_val_dataset, iou_types)
+    coco_ap_05 = CocoAP5(coco_api_val_dataset, iou_types)
+    coco_ap_075 = CocoAP75(coco_api_val_dataset, iou_types)
+    coco_ap.attach(evaluator, "AP")
+    coco_ap_05.attach(evaluator, "AP0.5")
+    coco_ap_075.attach(evaluator, "AP0.75")
+
+    tb_logger.attach(
+        evaluator,
+        log_handler=OutputHandler(
+            tag='evaluation',
+            metric_names=['AP', 'AP0.5', 'AP0.75'],
+            global_step_transform=global_step_from_engine(evaluator)
+        ),
+        event_name=Events.COMPLETED
+    )
+
     @evaluator.on(Events.STARTED)
     def on_evaluation_started(engine):
         model.eval()
-        engine.state.coco_evaluator = CocoEvaluator(coco_api_val_dataset, iou_types)
+        # engine.state.coco_evaluator = CocoEvaluator(coco_api_val_dataset, iou_types)
 
     @evaluator.on(Events.ITERATION_COMPLETED)
     def on_eval_iteration_completed(engine):
@@ -77,6 +107,7 @@ def run(batch_size=1, log_interval=100, debug_images_interval=500,
             print("Evaluation: Iteration: {}".format(engine.state.iteration))
 
         if engine.state.iteration % debug_images_interval == 0:
+            print('Saving debug image...')
             for n, debug_image in enumerate(draw_debug_images(images, targets, results)):
                 writer.add_image("evaluation/image_{}_{}".format(engine.state.iteration, n),
                                  debug_image, evaluator.state.iteration, dataformats='HWC')
@@ -92,17 +123,22 @@ def run(batch_size=1, log_interval=100, debug_images_interval=500,
     @evaluator.on(Events.COMPLETED)
     def on_evaluation_completed(engine):
         # gather the stats from all processes
-        engine.state.coco_evaluator.synchronize_between_processes()
+        # engine.state.coco_evaluator.synchronize_between_processes()
 
         # accumulate predictions from all images
-        engine.state.coco_evaluator.accumulate()
-        engine.state.coco_evaluator.summarize()
+        # engine.state.coco_evaluator.accumulate()
+        # engine.state.coco_evaluator.summarize()
+        #
+        # pr_50, pr_75 = get_pr_levels(engine.state.coco_evaluator.coco_eval['bbox'])
+        # plot_pr_curve_tensorboard(pr_50, pr_75, writer=writer)
 
-        pr_50, pr_75 = get_pr_levels(engine.state.coco_evaluator.coco_eval['bbox'])
-        plot_pr_curve_tensorboard(pr_50, pr_75, writer=writer)
+        writer.add_hparams(hparam_dict, {
+            'hparams/AP': coco_ap.ap,
+            'hparams/AP.5': coco_ap_05.ap5,
+            'hparams/AP.75': coco_ap_075.ap75
+        })
 
-        writer.add_text(tag='AP.5', text_string=str(np.mean(pr_50)), global_step=engine.state.iteration)
-        writer.add_text(tag='AP.75', text_string=str(np.mean(pr_75)), global_step=engine.state.iteration)
+        coco_ap.write_tensorboard_pr_curve(writer)
 
     # evaluator.state = State()
     evaluator.run(val_loader)
@@ -113,9 +149,9 @@ if __name__ == "__main__":
     parser = ArgumentParser(formatter_class=ArgumentDefaultsHelpFormatter)
     parser.add_argument('--batch_size', type=int, default=1,
                         help='input batch size for training and validation')
-    parser.add_argument('--log_interval', type=int, default=100,
+    parser.add_argument('--log_interval', type=int, default=50,
                         help='how many batches to wait before logging training status')
-    parser.add_argument('--debug_images_interval', type=int, default=500,
+    parser.add_argument('--debug_images_interval', type=int, default=10,
                         help='how many batches to wait before logging debug images')
     parser.add_argument('--val_dataset_ann_file', type=str, default='./annotations/instances_val2017.json',
                         help='annotation file of test dataset')

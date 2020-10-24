@@ -4,23 +4,19 @@ import os
 from argparse import ArgumentParser, ArgumentDefaultsHelpFormatter
 from itertools import chain
 
-import numpy as np
-
 import torch
 from ignite.contrib.handlers import TensorboardLogger, BasicTimeProfiler
-from ignite.contrib.handlers.tensorboard_logger import WeightsHistHandler, OptimizerParamsHandler, GradsHistHandler, \
-    GradsScalarHandler
+from ignite.contrib.handlers.tensorboard_logger import WeightsHistHandler, OptimizerParamsHandler, OutputHandler
 from ignite.engine import Events, State
-from torch.utils.tensorboard import SummaryWriter
+from ignite.handlers import global_step_from_engine
 
+from artnet.ignite.metrics import CocoAP, CocoAP75, CocoAP5
 from .data import get_data_loaders, configuration_data
 from .engines import create_trainer, create_evaluator
-from ..plot import get_pr_levels
-from ..utils import utils
-from ..utils.coco_eval import CocoEvaluator
-from ..utils.coco_utils import convert_to_coco_api
 from .utilities import draw_debug_images, draw_mask, get_model_instance_segmentation, get_iou_types, \
-    get_model_instance_detection
+    get_model_instance_detection, draw_boxes
+from ..utils import utils
+from ..utils.coco_utils import convert_to_coco_api
 
 # import torch.multiprocessing
 # torch.multiprocessing.set_sharing_strategy('file_system')
@@ -35,45 +31,63 @@ logger = logging.getLogger('artnet.ignite.train')
 logging.getLogger('ignite.engine.engine.Engine').setLevel(logging.INFO)
 
 
-def run(warmup_iterations=5000, batch_size=4, test_size=2000, epochs=10, log_interval=100, debug_images_interval=500,
+def run(warmup_iterations=5000, batch_size=4, test_size=2000, epochs=10, log_interval=100, debug_images_interval=30,
         train_dataset_ann_file='~/bigdata/coco/annotations/instances_train2017.json',
         val_dataset_ann_file='~/bigdata/coco/annotations/instances_val2017.json', input_checkpoint='',
         load_optimizer=False, output_dir="/tmp/checkpoints", log_dir="/tmp/tensorboard_logs", lr=0.005, momentum=0.9,
-        weight_decay=0.0005, use_mask=True, use_toy_testing_data=False, backbone_name='resnet101', num_workers=6):
+        weight_decay=0.0005, use_mask=True, use_toy_testing_data=False, backbone_name='resnet101', num_workers=6,
+        trainable_layers=3):
+
+    # Write hyperparams
+    hparam_dict = {
+        'warmup_iterations': warmup_iterations,
+        'training_batch_size': batch_size,
+        'test_size': test_size,
+        'epochs': epochs,
+        'trainable_layers': trainable_layers,
+        'load_optimizer': load_optimizer,
+        'lr': lr,
+        'momentum': momentum,
+        'weight_decay': weight_decay,
+    }
+
     # Define train and test datasets
     train_loader, val_loader, labels_enum = get_data_loaders(train_dataset_ann_file,
                                                              val_dataset_ann_file,
                                                              batch_size,
                                                              test_size,
                                                              configuration_data.get('image_size'),
-                                                             use_mask=use_mask, _use_toy_testing_set=use_toy_testing_data)
-    val_dataset = list(chain.from_iterable(zip(*copy.deepcopy(batch)) for batch in iter(val_loader))) #TODO Figure out what this does and use deepcopy.
+                                                             use_mask=use_mask,
+                                                             _use_toy_testing_set=use_toy_testing_data,
+                                                             num_workers=num_workers)
+    val_dataset = list(chain.from_iterable(
+        zip(*copy.deepcopy(batch)) for batch in iter(val_loader)))  # TODO Figure out what this does and use deepcopy.
     coco_api_val_dataset = convert_to_coco_api(val_dataset)
     num_classes = max(labels_enum.keys()) + 1  # number of classes plus one for background class
     configuration_data['num_classes'] = num_classes
 
     logger.info('Training with {} classes...'.format(num_classes))
-    
+
     # Set the training device to GPU if available - if not set it to CPU
     device = torch.cuda.current_device() if torch.cuda.is_available() else torch.device('cpu')
     torch.backends.cudnn.benchmark = True if torch.cuda.is_available() else False  # optimization for fixed input size
 
     if use_mask:
-        logger.DEBUG('Loading MaskRCNN Model...')
+        logger.debug('Loading MaskRCNN Model...')
         model = get_model_instance_segmentation(num_classes, configuration_data.get('mask_predictor_hidden_layer'))
     else:
-        logger.DEBUG('Loading FasterRCNN Model...')
-        model = get_model_instance_detection(num_classes, backbone_name=backbone_name)
+        logger.debug('Loading FasterRCNN Model...')
+        model = get_model_instance_detection(num_classes, backbone_name=backbone_name, trainable_layers=trainable_layers)
     iou_types = get_iou_types(model)
-    
+
     # if there is more than one GPU, parallelize the model
     if torch.cuda.device_count() > 1:
-        logger.DEBUG("{} GPUs were detected - we will use all of them".format(torch.cuda.device_count()))
+        logger.debug("{} GPUs were detected - we will use all of them".format(torch.cuda.device_count()))
         model = torch.nn.DataParallel(model)
-    
+
     # copy the model to each device
     model.to(device)
-    
+
     if input_checkpoint:
         logger.info('Loading model checkpoint from '.format(input_checkpoint))
         input_checkpoint = torch.load(input_checkpoint, map_location=torch.device(device))
@@ -84,42 +98,52 @@ def run(warmup_iterations=5000, batch_size=4, test_size=2000, epochs=10, log_int
         comment = 'mask'
     else:
         comment = 'box-{}'.format(backbone_name)
-    writer = SummaryWriter(log_dir=log_dir, comment=comment)
-    # Write hyperparams
-    hparam_dict = {
-        'warmup_iterations': 5000,
-        'batch_size': 4,
-        'test_size': 2000,
-        'epochs': 10,
-    }
 
-    logger.DEBUG('Creating Trainer...')
+    logger.debug('Creating Trainer...')
     # define Ignite's train and evaluation engine
     trainer = create_trainer(model, device)
-    logger.DEBUG('Creating Evaluator...')
+    logger.debug('Creating Evaluator...')
     evaluator = create_evaluator(model, device)
 
-    logger.DEBUG('Initializing Tensorboard Logger...')
-    tb_logger = TensorboardLogger(log_dir=log_dir)
+    logger.debug('Initializing Tensorboard Logger...')
+    tb_logger = TensorboardLogger(log_dir=log_dir, comment=comment)
     tb_logger.attach(
         trainer,
         event_name=Events.ITERATION_COMPLETED(every=200),
         log_handler=WeightsHistHandler(model)
     )
+    writer = tb_logger.writer
 
-    logger.DEBUG('Setting up profiler...')
+    logger.debug('Setting up profiler...')
     profiler = BasicTimeProfiler()
     profiler.attach(trainer)
 
+    coco_ap = CocoAP(coco_api_val_dataset, iou_types)
+    coco_ap_05 = CocoAP5(coco_api_val_dataset, iou_types)
+    coco_ap_075 = CocoAP75(coco_api_val_dataset, iou_types)
+    coco_ap.attach(evaluator, "AP")
+    coco_ap_05.attach(evaluator, "AP0.5")
+    coco_ap_075.attach(evaluator, "AP0.75")
+
+    tb_logger.attach(
+        evaluator,
+        log_handler=OutputHandler(
+            tag='evaluation',
+            metric_names=['AP', 'AP0.5', 'AP0.75'],
+            global_step_transform=global_step_from_engine(trainer)
+        ),
+        event_name=Events.EPOCH_COMPLETED
+    )
+
     @trainer.on(Events.EPOCH_COMPLETED)
     def log_intermediate_results():
-        logger.DEBUG('Epoch Complete...')
+        logger.debug('Epoch Complete...')
         profiler.print_results(profiler.get_results())
 
     @trainer.on(Events.STARTED)
     def on_training_started(engine):
         # construct an optimizer
-        logger.DEBUG('Started Training...')
+        logger.debug('Started Training...')
         params = [p for p in model.parameters() if p.requires_grad]
         engine.state.optimizer = torch.optim.SGD(params,
                                                  lr=lr,
@@ -136,18 +160,19 @@ def run(warmup_iterations=5000, batch_size=4, test_size=2000, epochs=10, log_int
         if input_checkpoint and load_optimizer:
             engine.state.optimizer.load_state_dict(input_checkpoint['optimizer'])
             engine.state.scheduler.load_state_dict(input_checkpoint['lr_scheduler'])
-    
+
     @trainer.on(Events.EPOCH_STARTED)
     def on_epoch_started(engine):
-        logger.DEBUG('Started Epoch...')
+        logger.debug('Started Epoch...')
         model.train()
         engine.state.warmup_scheduler = None
         if engine.state.epoch == 1:
             warmup_iters = min(warmup_iterations, len(train_loader) - 1)
             print('Warm up period was set to {} iterations'.format(warmup_iters))
             warmup_factor = 1. / warmup_iters
-            engine.state.warmup_scheduler = utils.warmup_lr_scheduler(engine.state.optimizer, warmup_iters, warmup_factor)
-    
+            engine.state.warmup_scheduler = utils.warmup_lr_scheduler(engine.state.optimizer, warmup_iters,
+                                                                      warmup_factor)
+
     @trainer.on(Events.ITERATION_COMPLETED)
     def on_iteration_completed(engine):
         images, targets, loss_dict_reduced = engine.state.output
@@ -156,9 +181,10 @@ def run(warmup_iterations=5000, batch_size=4, test_size=2000, epochs=10, log_int
             print("Epoch: {}, Iteration: {}, Loss: {}".format(engine.state.epoch, engine.state.iteration, loss))
             for k, v in loss_dict_reduced.items():
                 writer.add_scalar("loss/{}".format(k), v.item(), engine.state.iteration)
-            writer.add_scalar("loss/total_loss", sum(loss for loss in loss_dict_reduced.values()).item(), engine.state.iteration)
-            writer.add_scalar("learning rate/lr", engine.state.optimizer.param_groups[0]['lr'], engine.state.iteration)
-        
+            writer.add_scalar("loss/total_loss", sum(loss for loss in loss_dict_reduced.values()).item(),
+                              engine.state.iteration)
+            writer.add_scalar("learning_rate/lr", engine.state.optimizer.param_groups[0]['lr'], engine.state.iteration)
+
         if engine.state.iteration % debug_images_interval == 0:
             for n, debug_image in enumerate(draw_debug_images(images, targets)):
                 writer.add_image("training/image_{}".format(n), debug_image, engine.state.iteration, dataformats='HWC')
@@ -166,16 +192,16 @@ def run(warmup_iterations=5000, batch_size=4, test_size=2000, epochs=10, log_int
                     writer.add_image("training/image_{}_mask".format(n),
                                      draw_mask(targets[n]), engine.state.iteration, dataformats='HW')
         images = targets = loss_dict_reduced = engine.state.output = None
-    
+
     @trainer.on(Events.EPOCH_COMPLETED)
     def on_epoch_completed(engine):
-        logger.DEBUG('Finished Epoch...')
+        logger.debug('Finished Epoch...')
         engine.state.scheduler.step()
         evaluator.run(val_loader)
-        for res_type in evaluator.state.coco_evaluator.iou_types:
-            average_precision_05 = evaluator.state.coco_evaluator.coco_eval[res_type].stats[1]
-            writer.add_scalar("validation-{}/average precision 0_5".format(res_type), average_precision_05,
-                              engine.state.iteration)
+        # for res_type in evaluator.state.coco_evaluator.iou_types:
+        #     average_precision_05 = evaluator.state.coco_evaluator.coco_eval[res_type].stats[1]
+        #     writer.add_scalar("validation-{}/average precision 0_5".format(res_type), average_precision_05,
+        #                       engine.state.iteration)
         checkpoint_path = os.path.join(output_dir, 'model_epoch_{}.pth'.format(engine.state.epoch))
         print('Saving model checkpoint')
         checkpoint = {
@@ -190,51 +216,64 @@ def run(warmup_iterations=5000, batch_size=4, test_size=2000, epochs=10, log_int
         checkpoint = None
         evaluator.state = State()
 
+    @trainer.on(Events.COMPLETED)
+    def on_training_completed(engine):
+        logger.debug('Finished Training...')
+        writer.add_hparams(hparam_dict, {
+            'hparams/AP': coco_ap.ap,
+            'hparams/AP.5': coco_ap_05.ap5,
+            'hparams/AP.75': coco_ap_075.ap75
+        })
+
     @evaluator.on(Events.STARTED)
     def on_evaluation_started(engine):
-        logger.DEBUG('Started Evaluation...')
+        logger.debug('Started Evaluation...')
         model.eval()
-        engine.state.coco_evaluator = CocoEvaluator(coco_api_val_dataset, iou_types)
+        # engine.state.coco_evaluator = CocoEvaluator(coco_api_val_dataset, iou_types)
 
     @evaluator.on(Events.ITERATION_COMPLETED)
     def on_eval_iteration_completed(engine):
         images, targets, results = engine.state.output
         if engine.state.iteration % log_interval == 0:
             print("Evaluation: Iteration: {}".format(engine.state.iteration))
-        
+
         if engine.state.iteration % debug_images_interval == 0:
             for n, debug_image in enumerate(draw_debug_images(images, targets, results)):
+                print('Drawing debug image "validation/image_{}_{}"'.format(engine.state.iteration, n))
                 writer.add_image("evaluation/image_{}_{}".format(engine.state.iteration, n),
                                  debug_image, trainer.state.iteration, dataformats='HWC')
                 if 'masks' in targets[n]:
-                    writer.add_image("evaluation/image_{}_{}_mask".format(engine.state.iteration, n),
+                    writer.add_image("validation/image_{}_{}_mask".format(engine.state.iteration, n),
                                      draw_mask(targets[n]), trainer.state.iteration, dataformats='HW')
                     curr_image_id = int(targets[n]['image_id'])
-                    writer.add_image("evaluation/image_{}_{}_predicted_mask".format(engine.state.iteration, n),
-                                     draw_mask(results[curr_image_id]).squeeze(), trainer.state.iteration, dataformats='HW')
+                    writer.add_image("validation/image_{}_{}_predicted_mask".format(engine.state.iteration, n),
+                                     draw_mask(results[curr_image_id]).squeeze(), trainer.state.iteration,
+                                     dataformats='HW')
         images = targets = results = engine.state.output = None
 
     @evaluator.on(Events.COMPLETED)
     def on_evaluation_completed(engine):
-        logger.DEBUG('Finished Evaluation...')
+        logger.debug('Finished Evaluation...')
         # gather the stats from all processes
-        engine.state.coco_evaluator.synchronize_between_processes()
-        
-        # accumulate predictions from all images
-        engine.state.coco_evaluator.accumulate()
-        engine.state.coco_evaluator.summarize()
+        # engine.state.coco_evaluator.synchronize_between_processes()
+        #
+        # # accumulate predictions from all images
+        # engine.state.coco_evaluator.accumulate()
+        # engine.state.coco_evaluator.summarize()
+        #
+        # pr_50, pr_75 = get_pr_levels(engine.state.coco_evaluator.coco_eval['bbox'])
+        # TODO Bring this back
+        # writer.add_hparams(hparam_dict, {
+        #     'hparams/AP.5': np.mean(pr_50),
+        #     'hparams/AP.75': np.mean(pr_75)
+        # })
 
-        pr_50, pr_75 = get_pr_levels(engine.state.coco_evaluator.coco_eval['bbox'])
-        writer.add_hparams(hparam_dict, {
-            'hparams/AP.5': np.mean(pr_50),
-            'hparams/AP.75': np.mean(pr_75)
-        })
-
-    logger.DEBUG('Running Trainer...')
+    logger.debug('Running Trainer...')
     trainer.run(train_loader, max_epochs=epochs)
     writer.close()
 
     profiler.write_results('{}/time_profiling.csv'.format(output_dir))
+
 
 if __name__ == "__main__":
     parser = ArgumentParser(formatter_class=ArgumentDefaultsHelpFormatter)
@@ -248,7 +287,7 @@ if __name__ == "__main__":
                         help='number of epochs to train')
     parser.add_argument('--log_interval', type=int, default=100,
                         help='how many batches to wait before logging training status')
-    parser.add_argument('--debug_images_interval', type=int, default=500,
+    parser.add_argument('--debug_images_interval', type=int, default=30,
                         help='how many batches to wait before logging debug images')
     parser.add_argument('--train_dataset_ann_file', type=str,
                         default='./annotations/instances_train2017.json',
@@ -277,6 +316,8 @@ if __name__ == "__main__":
                         help='which backbone to use. options are resnet101, resnet50, and shape-resnet50')
     parser.add_argument("--num_workers", type=int, default=6,
                         help='number of workers to use for data loading')
+    parser.add_argument("--trainable_layers", type=int, default=3,
+                        help='number of layers to train (1-5)')
     args = parser.parse_args()
 
     if not os.path.exists(args.output_dir):

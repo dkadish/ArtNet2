@@ -56,10 +56,17 @@ def draw_mask(target):
     masks_out = masks_sum + 25*(masks_sum > 0)
     return (masks_out*int(255/masks_out.max())).astype('uint8')
 
+# def draw_boxes(target):
+#     #FIXME THIS!
+#     masks = [channel*label for channel, label in zip(target['masks'].cpu().numpy(), target['labels'].cpu().numpy())]
+#     masks_sum = sum(masks)
+#     masks_out = masks_sum + 25*(masks_sum > 0)
+#     return (masks_out*int(255/masks_out.max())).astype('uint8')
 
-def get_model_instance_segmentation(num_classes, hidden_layer):
+
+def get_model_instance_segmentation(num_classes, hidden_layer, pretrained=True, trainable_backbone_layers=3):
     # load an instance segmentation model pre-trained on COCO
-    model = torchvision.models.detection.maskrcnn_resnet50_fpn(pretrained=True)
+    model = torchvision.models.detection.maskrcnn_resnet50_fpn(pretrained=pretrained, trainable_backbone_layers=trainable_backbone_layers)
 
     # get number of input features for the classifier
     in_features = model.roi_heads.box_predictor.cls_score.in_features
@@ -73,7 +80,7 @@ def get_model_instance_segmentation(num_classes, hidden_layer):
     model.roi_heads.mask_predictor = MaskRCNNPredictor(in_features_mask, hidden_layer, num_classes)
     return model
 
-def get_model_instance_detection(num_classes, backbone_name='resnet101', trainable_layers=3, ):
+def get_model_instance_detection(num_classes, backbone_name='resnet101', pretrained_backbone=True, trainable_layers=3):
     if backbone_name == 'shape-resnet50':
         url_resnet50_trained_on_SIN_and_IN_then_finetuned_on_IN = 'https://bitbucket.org/robert_geirhos/texture-vs-shape-pretrained-models/raw/60b770e128fffcbd8562a3ab3546c1a735432d03/resnet50_finetune_60_epochs_lr_decay_after_30_start_resnet50_train_45_epochs_combined_IN_SF-ca06340c.pth.tar'
         
@@ -91,14 +98,14 @@ def get_model_instance_detection(num_classes, backbone_name='resnet101', trainab
         fbn = partial(FrozenBatchNorm2d, eps=1E-5)
 
         try:
-            backbone = resnet_fpn_backbone('resnet50', pretrained=True, norm_layer=fbn, trainable_layers=3).cuda()
+            backbone = resnet_fpn_backbone('resnet50', pretrained=pretrained_backbone, norm_layer=fbn, trainable_layers=trainable_layers).cuda()
         except (RuntimeError, AssertionError) as e:
-            backbone = resnet_fpn_backbone('resnet50', pretrained=True, norm_layer=fbn, trainable_layers=3).cpu()
+            backbone = resnet_fpn_backbone('resnet50', pretrained=pretrained_backbone, norm_layer=fbn, trainable_layers=trainable_layers).cpu()
 
         missing, unexpected = backbone.load_state_dict(state_dict_body, strict=False)
         print('When creating shape-resnet50...\nMissing states: {}\nUnexpected states: {}'.format(missing, unexpected))
     else:
-        backbone = resnet_fpn_backbone(backbone_name, pretrained=True, trainable_layers=trainable_layers)
+        backbone = resnet_fpn_backbone(backbone_name, pretrained=pretrained_backbone, trainable_layers=trainable_layers)
     model = FasterRCNN(backbone, num_classes=num_classes)
 
     return model

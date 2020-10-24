@@ -7,6 +7,7 @@ from torch.utils.tensorboard import SummaryWriter
 def get_pr_levels(ce):
     all_precision = ce.eval['precision']
 
+    # pr = all_precision[:, :, 0, 0, 2]  # data for IoU@.50:.05:.95
     pr_50 = all_precision[0, :, 0, 0, 2]  # data for IoU@0.5
     pr_75 = all_precision[5, :, 0, 0, 2]  # data for IoU@0.75
 
@@ -28,7 +29,7 @@ def plot_curve_mpl(pr_50, pr_75):
     plt.legend()
 
 
-def plot_pr_curve_tensorboard(p50, p75, writer=None):
+def plot_pr_curve_tensorboard(p50, p75, writer=None, write_averages=False):
     if writer is None:
         writer = SummaryWriter()
 
@@ -38,8 +39,9 @@ def plot_pr_curve_tensorboard(p50, p75, writer=None):
     for x, y in zip(np.linspace(0.0,1.0,num=101), p75):
         writer.add_scalar('pr_curve/AP.75', y, x)
 
-    writer.add_scalar('metrics/AP.5', np.mean(p50), 0)
-    writer.add_scalar('metrics/AP.5', np.mean(p75), 0)
+    if write_averages:
+        writer.add_scalar('metrics/AP.5', np.mean(p50), 0)
+        writer.add_scalar('metrics/AP.5', np.mean(p75), 0)
 
 
 def plot_pr_curve_altair(p50, p75):
