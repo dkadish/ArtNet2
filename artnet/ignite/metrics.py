@@ -87,7 +87,7 @@ class CocoMetricBase(Metric):
         return ap, ap5, ap75
 
     def write_tensorboard_pr_curve(self, writer):
-        pr_50, pr_75 = get_pr_levels(self.coco_evaluator)
+        pr_50, pr_75 = get_pr_levels(self.coco_evaluator.coco_eval)
         plot_pr_curve_tensorboard(pr_50, pr_75, writer)
 
 class CocoAP(CocoMetricBase):

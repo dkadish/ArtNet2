@@ -2,9 +2,10 @@ import numpy as np
 import matplotlib as plt
 import pandas as pd
 from torch.utils.tensorboard import SummaryWriter
+from pycocotools.cocoeval import COCOeval
 
 
-def get_pr_levels(ce):
+def get_pr_levels(ce: COCOeval):
     all_precision = ce.eval['precision']
 
     # pr = all_precision[:, :, 0, 0, 2]  # data for IoU@.50:.05:.95
