@@ -225,7 +225,7 @@ def run(warmup_iterations=5000, batch_size=4, test_size=2000, epochs=10, log_int
     @trainer.on(Events.COMPLETED)
     def on_training_completed(engine):
         logger.debug('Finished Training...')
-        writer.add_hparams(hparam_dict, {
+        writer.add_hparams(hparam_dict=hparam_dict, metric_dict={
             'hparams/AP': coco_ap.ap,
             'hparams/AP.5': coco_ap_05.ap5,
             'hparams/AP.75': coco_ap_075.ap75
