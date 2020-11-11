@@ -50,6 +50,7 @@ def run(warmup_iterations=5000, batch_size=4, test_size=2000, epochs=10, log_int
         'lr': lr,
         'momentum': momentum,
         'weight_decay': weight_decay,
+        'train_set_size': train_set_size
     }
 
     with open(os.path.join(output_dir, 'hparams.pickle'), 'wb') as f:

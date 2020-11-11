@@ -37,10 +37,12 @@ def run(batch_size=1, log_interval=50, debug_images_interval=10,
     # Load the old hparams
     hparam_file = Path(input_checkpoint).parent / 'hparams.pickle'
     try:
+        print('Opening hparams file from {}'.format(hparam_file.absolute()))
         with open(hparam_file, 'rb') as f:
             # The protocol version used is detected automatically, so we do not
             # have to specify it.
             data = pickle.load(f)
+            print('Updating hparams with {}'.format(data))
             hparam_dict.update(data)
     except FileNotFoundError as e:
         print('HParam file not found at {}'.format(hparam_file.absolute()))
