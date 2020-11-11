@@ -150,7 +150,7 @@ def run(batch_size=1, log_interval=50, debug_images_interval=10,
         # plot_pr_curve_tensorboard(pr_50, pr_75, writer=writer)
         print('Writing hparams: {}'.format(hparam_dict))
 
-        writer.add_hparams(hparam_dict, {
+        writer.add_hparams(hparam_dict=hparam_dict, metric_dict={
             'hparams/AP': coco_ap.ap,
             'hparams/AP.5': coco_ap_05.ap5,
             'hparams/AP.75': coco_ap_075.ap75

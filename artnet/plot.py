@@ -34,11 +34,11 @@ def plot_pr_curve_tensorboard(p50, p75, writer=None, write_averages=False):
     if writer is None:
         writer = SummaryWriter()
 
-    for x, y in zip(np.linspace(0.0,1.0,num=101), p50):
-        writer.add_scalar('pr_curve/AP.5', y, x)
+    for x, y in zip(range(101), p50):
+        writer.add_scalar('pr_curve/AP.5', y, global_step=x)
 
-    for x, y in zip(np.linspace(0.0,1.0,num=101), p75):
-        writer.add_scalar('pr_curve/AP.75', y, x)
+    for x, y in zip(range(101), p75):
+        writer.add_scalar('pr_curve/AP.75', y, global_step=x)
 
     if write_averages:
         writer.add_scalar('metrics/AP.5', np.mean(p50), 0)
