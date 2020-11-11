@@ -1,6 +1,8 @@
 import os
+import pickle
 from argparse import ArgumentParser, ArgumentDefaultsHelpFormatter
 from itertools import chain
+from pathlib import Path
 
 import torch
 from ignite.contrib.handlers import TensorboardLogger
@@ -31,6 +33,18 @@ def run(batch_size=1, log_interval=50, debug_images_interval=10,
         # 'momentum': momentum,
         # 'weight_decay': weight_decay,
     }
+
+    # Load the old hparams
+    hparam_file = Path(input_checkpoint).parent / 'hparams.pickle'
+    try:
+        with open(hparam_file, 'rb') as f:
+            # The protocol version used is detected automatically, so we do not
+            # have to specify it.
+            data = pickle.load(f)
+            hparam_dict.update(data)
+    except FileNotFoundError as e:
+        print('HParam file not found at {}'.format(hparam_file.absolute()))
+
 
     # Define train and test datasets
     val_loader, labels_enum = get_eval_data_loader(

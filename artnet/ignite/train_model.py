@@ -1,6 +1,7 @@
 import copy
 import logging
 import os
+import pickle
 from argparse import ArgumentParser, ArgumentDefaultsHelpFormatter
 from itertools import chain
 
@@ -50,6 +51,9 @@ def run(warmup_iterations=5000, batch_size=4, test_size=2000, epochs=10, log_int
         'momentum': momentum,
         'weight_decay': weight_decay,
     }
+
+    with open(os.path.join(output_dir, 'hparams.pickle'), 'wb') as f:
+        pickle.dump(hparam_dict, f)
 
     # Define train and test datasets
     train_loader, val_loader, labels_enum = get_data_loaders(train_dataset_ann_file,
