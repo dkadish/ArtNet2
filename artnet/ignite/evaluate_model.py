@@ -46,7 +46,8 @@ def run(batch_size=1, log_interval=50, debug_images_interval=10,
             hparam_dict.update(data)
     except FileNotFoundError as e:
         print('HParam file not found at {}'.format(hparam_file.absolute()))
-
+    
+    print('Params: {}'.format(hparam_dict))
 
     # Define train and test datasets
     val_loader, labels_enum = get_eval_data_loader(
@@ -147,6 +148,7 @@ def run(batch_size=1, log_interval=50, debug_images_interval=10,
         #
         # pr_50, pr_75 = get_pr_levels(engine.state.coco_evaluator.coco_eval['bbox'])
         # plot_pr_curve_tensorboard(pr_50, pr_75, writer=writer)
+        print('Writing hparams: {}'.format(hparam_dict))
 
         writer.add_hparams(hparam_dict, {
             'hparams/AP': coco_ap.ap,
