@@ -37,7 +37,7 @@ def run(warmup_iterations=5000, batch_size=4, test_size=2000, epochs=10, log_int
         val_dataset_ann_file='~/bigdata/coco/annotations/instances_val2017.json', input_checkpoint='',
         load_optimizer=False, output_dir="/tmp/checkpoints", log_dir="/tmp/tensorboard_logs", lr=0.005, momentum=0.9,
         weight_decay=0.0005, use_mask=True, use_toy_testing_data=False, backbone_name='resnet101', num_workers=6,
-        trainable_layers=3, train_set_size=None, early_stopping=False, patience=3):
+        trainable_layers=3, train_set_size=None, early_stopping=False, patience=3, step_size=3, gamma=0.1):
 
     # Write hyperparams
     hparam_dict = {
@@ -51,6 +51,8 @@ def run(warmup_iterations=5000, batch_size=4, test_size=2000, epochs=10, log_int
         'momentum': momentum,
         'weight_decay': weight_decay,
         'train_set_size': train_set_size,
+        'step_size': step_size,
+        'gamma': gamma,
         'early_stopping': early_stopping,
         'patience': patience
     }
@@ -122,7 +124,7 @@ def run(warmup_iterations=5000, batch_size=4, test_size=2000, epochs=10, log_int
     tb_logger = TensorboardLogger(log_dir=log_dir, comment=comment)
     tb_logger.attach(
         trainer,
-        event_name=Events.ITERATION_COMPLETED(every=200),
+        event_name=Events.ITERATION_COMPLETED(every=500),
         log_handler=WeightsHistHandler(model)
     )
     writer = tb_logger.writer
@@ -349,6 +351,10 @@ if __name__ == "__main__":
                         help='use the early stopping function')
     parser.add_argument("--patience", type=int, default=3,
                         help='early stopping patience setting (number of epochs to keep going after decline')
+    parser.add_argument("--step_size", type=int, default=3,
+                        help='step size for learning scheduler')
+    parser.add_argument("--gamma", type=float, default=0.1,
+                        help="gamma for learning scheduler")
     args = parser.parse_args()
 
     if not os.path.exists(args.output_dir):
