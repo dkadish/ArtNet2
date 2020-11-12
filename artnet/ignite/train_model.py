@@ -9,7 +9,7 @@ import torch
 from ignite.contrib.handlers import TensorboardLogger, BasicTimeProfiler
 from ignite.contrib.handlers.tensorboard_logger import WeightsHistHandler, OptimizerParamsHandler, OutputHandler
 from ignite.engine import Events, State
-from ignite.handlers import global_step_from_engine
+from ignite.handlers import global_step_from_engine, EarlyStopping
 
 from artnet.ignite.metrics import CocoAP, CocoAP75, CocoAP5
 from .data import get_data_loaders, configuration_data
@@ -37,7 +37,7 @@ def run(warmup_iterations=5000, batch_size=4, test_size=2000, epochs=10, log_int
         val_dataset_ann_file='~/bigdata/coco/annotations/instances_val2017.json', input_checkpoint='',
         load_optimizer=False, output_dir="/tmp/checkpoints", log_dir="/tmp/tensorboard_logs", lr=0.005, momentum=0.9,
         weight_decay=0.0005, use_mask=True, use_toy_testing_data=False, backbone_name='resnet101', num_workers=6,
-        trainable_layers=3, train_set_size=None):
+        trainable_layers=3, train_set_size=None, early_stopping=False):
 
     # Write hyperparams
     hparam_dict = {
@@ -145,6 +145,15 @@ def run(warmup_iterations=5000, batch_size=4, test_size=2000, epochs=10, log_int
         ),
         event_name=Events.EPOCH_COMPLETED
     )
+
+    ## Early stopping
+    def score_function(engine):
+        ap_score = engine.state.metrics['AP']
+        return ap_score
+
+    handler = EarlyStopping(patience=3, score_function=score_function, trainer=trainer)
+    # Note: the handler is attached to an *Evaluator* (runs one epoch on validation dataset).
+    evaluator.add_event_handler(Events.COMPLETED, handler)
 
     @trainer.on(Events.EPOCH_COMPLETED)
     def log_intermediate_results():
