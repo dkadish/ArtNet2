@@ -37,7 +37,7 @@ def run(warmup_iterations=5000, batch_size=4, test_size=2000, epochs=10, log_int
         val_dataset_ann_file='~/bigdata/coco/annotations/instances_val2017.json', input_checkpoint='',
         load_optimizer=False, output_dir="/tmp/checkpoints", log_dir="/tmp/tensorboard_logs", lr=0.005, momentum=0.9,
         weight_decay=0.0005, use_mask=True, use_toy_testing_data=False, backbone_name='resnet101', num_workers=6,
-        trainable_layers=3, train_set_size=None, early_stopping=False):
+        trainable_layers=3, train_set_size=None, early_stopping=False, patience=3):
 
     # Write hyperparams
     hparam_dict = {
@@ -50,7 +50,9 @@ def run(warmup_iterations=5000, batch_size=4, test_size=2000, epochs=10, log_int
         'lr': lr,
         'momentum': momentum,
         'weight_decay': weight_decay,
-        'train_set_size': train_set_size
+        'train_set_size': train_set_size,
+        'early_stopping': early_stopping,
+        'patience': patience
     }
 
     with open(os.path.join(output_dir, 'hparams.pickle'), 'wb') as f:
@@ -151,9 +153,10 @@ def run(warmup_iterations=5000, batch_size=4, test_size=2000, epochs=10, log_int
         ap_score = engine.state.metrics['AP']
         return ap_score
 
-    handler = EarlyStopping(patience=3, score_function=score_function, trainer=trainer)
-    # Note: the handler is attached to an *Evaluator* (runs one epoch on validation dataset).
-    evaluator.add_event_handler(Events.COMPLETED, handler)
+    if early_stopping:
+        handler = EarlyStopping(patience=patience, score_function=score_function, trainer=trainer)
+        # Note: the handler is attached to an *Evaluator* (runs one epoch on validation dataset).
+        evaluator.add_event_handler(Events.COMPLETED, handler)
 
     @trainer.on(Events.EPOCH_COMPLETED)
     def log_intermediate_results():
@@ -239,6 +242,7 @@ def run(warmup_iterations=5000, batch_size=4, test_size=2000, epochs=10, log_int
     @trainer.on(Events.COMPLETED)
     def on_training_completed(engine):
         logger.debug('Finished Training...')
+        hparam_dict['total_steps'] = global_step_from_engine(engine)
         writer.add_hparams(hparam_dict=hparam_dict, metric_dict={
             'hparams/AP': coco_ap.ap,
             'hparams/AP.5': coco_ap_05.ap5,
@@ -341,6 +345,10 @@ if __name__ == "__main__":
                         help='number of layers to train (1-5)')
     parser.add_argument("--train_set_size", type=int, default=None,
                         help='number of images in the training data')
+    parser.add_argument("--early_stopping", default=False, type=bool,
+                        help='use the early stopping function')
+    parser.add_argument("--patience", type=int, default=3,
+                        help='early stopping patience setting (number of epochs to keep going after decline')
     args = parser.parse_args()
 
     if not os.path.exists(args.output_dir):
