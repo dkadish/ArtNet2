@@ -15,7 +15,7 @@ from artnet.ignite.metrics import CocoAP, CocoAP75, CocoAP5
 from .data import get_data_loaders, configuration_data
 from .engines import create_trainer, create_evaluator
 from .utilities import draw_debug_images, draw_mask, get_model_instance_segmentation, get_iou_types, \
-    get_model_instance_detection, draw_boxes
+    get_model_instance_detection
 from ..utils import utils
 from ..utils.coco_utils import convert_to_coco_api
 
@@ -37,8 +37,8 @@ def run(warmup_iterations=5000, batch_size=4, test_size=2000, epochs=10, log_int
         val_dataset_ann_file='~/bigdata/coco/annotations/instances_val2017.json', input_checkpoint='',
         load_optimizer=False, output_dir="/tmp/checkpoints", log_dir="/tmp/tensorboard_logs", lr=0.005, momentum=0.9,
         weight_decay=0.0005, use_mask=True, use_toy_testing_data=False, backbone_name='resnet101', num_workers=6,
-        trainable_layers=3, train_set_size=None, early_stopping=False, patience=3, step_size=3, gamma=0.1):
-
+        trainable_layers=3, train_set_size=None, early_stopping=False, patience=3, step_size=3, gamma=0.1,
+        record_histograms=True):
     # Write hyperparams
     hparam_dict = {
         'warmup_iterations': warmup_iterations,
@@ -92,7 +92,8 @@ def run(warmup_iterations=5000, batch_size=4, test_size=2000, epochs=10, log_int
         model = get_model_instance_segmentation(num_classes, configuration_data.get('mask_predictor_hidden_layer'))
     else:
         logger.debug('Loading FasterRCNN Model...')
-        model = get_model_instance_detection(num_classes, backbone_name=backbone_name, trainable_layers=trainable_layers)
+        model = get_model_instance_detection(num_classes, backbone_name=backbone_name,
+                                             trainable_layers=trainable_layers)
     iou_types = get_iou_types(model)
 
     # if there is more than one GPU, parallelize the model
@@ -122,11 +123,12 @@ def run(warmup_iterations=5000, batch_size=4, test_size=2000, epochs=10, log_int
 
     logger.debug('Initializing Tensorboard Logger...')
     tb_logger = TensorboardLogger(log_dir=log_dir, comment=comment)
-    tb_logger.attach(
-        trainer,
-        event_name=Events.ITERATION_COMPLETED(every=500),
-        log_handler=WeightsHistHandler(model)
-    )
+    if record_histograms:
+        tb_logger.attach(
+            trainer,
+            event_name=Events.ITERATION_COMPLETED(every=500),
+            log_handler=WeightsHistHandler(model)
+        )
     writer = tb_logger.writer
 
     logger.debug('Setting up profiler...')
@@ -181,7 +183,8 @@ def run(warmup_iterations=5000, batch_size=4, test_size=2000, epochs=10, log_int
             event_name=Events.ITERATION_STARTED
         )
 
-        engine.state.scheduler = torch.optim.lr_scheduler.StepLR(engine.state.optimizer, step_size=3, gamma=0.1)
+        engine.state.scheduler = torch.optim.lr_scheduler.StepLR(engine.state.optimizer, step_size=step_size,
+                                                                 gamma=gamma)
         if input_checkpoint and load_optimizer:
             engine.state.optimizer.load_state_dict(input_checkpoint['optimizer'])
             engine.state.scheduler.load_state_dict(input_checkpoint['lr_scheduler'])
@@ -208,7 +211,7 @@ def run(warmup_iterations=5000, batch_size=4, test_size=2000, epochs=10, log_int
                 writer.add_scalar("loss/{}".format(k), v.item(), engine.state.iteration)
             writer.add_scalar("loss/total_loss", sum(loss for loss in loss_dict_reduced.values()).item(),
                               engine.state.iteration)
-            writer.add_scalar("learning_rate/lr", engine.state.optimizer.param_groups[0]['lr'], engine.state.iteration)
+            # writer.add_scalar("learning_rate/lr", engine.state.optimizer.param_groups[0]['lr'], engine.state.iteration)
 
         if engine.state.iteration % debug_images_interval == 0:
             for n, debug_image in enumerate(draw_debug_images(images, targets)):
@@ -339,7 +342,7 @@ if __name__ == "__main__":
                         help='use MaskRCNN if True. If False, use FasterRCNN for boxes only.')
     parser.add_argument("--use_toy_testing_data", default=False, type=bool,
                         help='use a small toy dataset to make sure things work')
-    parser.add_argument("--backbone_name", type=str, default='resnet101',
+    parser.add_argument("--backbone_name", type=str, defevault='resnet101',
                         help='which backbone to use. options are resnet101, resnet50, and shape-resnet50')
     parser.add_argument("--num_workers", type=int, default=6,
                         help='number of workers to use for data loading')
