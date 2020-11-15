@@ -342,7 +342,7 @@ if __name__ == "__main__":
                         help='use MaskRCNN if True. If False, use FasterRCNN for boxes only.')
     parser.add_argument("--use_toy_testing_data", default=False, type=bool,
                         help='use a small toy dataset to make sure things work')
-    parser.add_argument("--backbone_name", type=str, defevault='resnet101',
+    parser.add_argument("--backbone_name", type=str, default='resnet101',
                         help='which backbone to use. options are resnet101, resnet50, and shape-resnet50')
     parser.add_argument("--num_workers", type=int, default=6,
                         help='number of workers to use for data loading')
