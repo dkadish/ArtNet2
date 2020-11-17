@@ -362,6 +362,8 @@ if __name__ == "__main__":
                         help='step size for learning scheduler')
     parser.add_argument("--gamma", type=float, default=0.1,
                         help="gamma for learning scheduler")
+    parser.add_argument("--record_histograms", default=True, type=bool,
+                        help='save histograms during training')
     args = parser.parse_args()
 
     if not os.path.exists(args.output_dir):
