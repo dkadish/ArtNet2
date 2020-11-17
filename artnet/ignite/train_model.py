@@ -32,7 +32,7 @@ logger = logging.getLogger('artnet.ignite.train')
 logging.getLogger('ignite.engine.engine.Engine').setLevel(logging.INFO)
 
 
-def run(warmup_iterations=5000, batch_size=4, test_size=2000, epochs=10, log_interval=100, debug_images_interval=30,
+def run(warmup_iterations=5000, batch_size=4, test_size=2000, epochs=10, log_interval=100, debug_images_interval=50,
         train_dataset_ann_file='~/bigdata/coco/annotations/instances_train2017.json',
         val_dataset_ann_file='~/bigdata/coco/annotations/instances_val2017.json', input_checkpoint='',
         load_optimizer=False, output_dir="/tmp/checkpoints", log_dir="/tmp/tensorboard_logs", lr=0.005, momentum=0.9,
@@ -57,9 +57,6 @@ def run(warmup_iterations=5000, batch_size=4, test_size=2000, epochs=10, log_int
         'patience': patience
     }
 
-    with open(os.path.join(output_dir, 'hparams.pickle'), 'wb') as f:
-        pickle.dump(hparam_dict, f)
-
     # Define train and test datasets
     train_loader, val_loader, labels_enum = get_data_loaders(train_dataset_ann_file,
                                                              val_dataset_ann_file,
@@ -74,6 +71,9 @@ def run(warmup_iterations=5000, batch_size=4, test_size=2000, epochs=10, log_int
     # Hparams
     hparam_dict['training_set_size'] = len(train_loader) * batch_size
     hparam_dict['validation_set_size'] = len(val_loader) * batch_size
+
+    with open(os.path.join(output_dir, 'hparams.pickle'), 'wb') as f:
+        pickle.dump(hparam_dict, f)
 
     val_dataset = list(chain.from_iterable(
         zip(*copy.deepcopy(batch)) for batch in iter(val_loader)))  # TODO Figure out what this does and use deepcopy.
@@ -248,6 +248,10 @@ def run(warmup_iterations=5000, batch_size=4, test_size=2000, epochs=10, log_int
     def on_training_completed(engine):
         logger.debug('Finished Training...')
         hparam_dict['total_steps'] = global_step_from_engine(engine)
+
+        with open(os.path.join(output_dir, 'hparams.pickle'), 'wb') as f:
+            pickle.dump(hparam_dict, f)
+
         writer.add_hparams(hparam_dict=hparam_dict, metric_dict={
             'hparams/AP': coco_ap.ap,
             'hparams/AP.5': coco_ap_05.ap5,
@@ -317,7 +321,7 @@ if __name__ == "__main__":
                         help='number of epochs to train')
     parser.add_argument('--log_interval', type=int, default=100,
                         help='how many batches to wait before logging training status')
-    parser.add_argument('--debug_images_interval', type=int, default=30,
+    parser.add_argument('--debug_images_interval', type=int, default=50,
                         help='how many batches to wait before logging debug images')
     parser.add_argument('--train_dataset_ann_file', type=str,
                         default='./annotations/instances_train2017.json',
