@@ -247,10 +247,14 @@ def run(warmup_iterations=5000, batch_size=4, test_size=2000, epochs=10, log_int
     @trainer.on(Events.COMPLETED)
     def on_training_completed(engine):
         logger.debug('Finished Training...')
-        # hparam_dict['total_steps'] = global_step_from_engine(engine)
+        hparam_dict['total_iterations'] = global_step_from_engine(engine)(engine, Events.ITERATION_COMPLETED)
+        hparam_dict['total_epochs'] = global_step_from_engine(engine)(engine, Events.EPOCH_COMPLETED)
 
-        # with open(os.path.join(output_dir, 'hparams2.pickle'), 'wb') as f:
-        #     pickle.dump(hparam_dict, f)
+        try:
+            with open(os.path.join(output_dir, 'hparams.pickle'), 'wb') as f:
+                pickle.dump(hparam_dict, f)
+        except AttributeError as e:q
+            print('Could not pickle one of the total vars.', e)
 
         writer.add_hparams(hparam_dict=hparam_dict, metric_dict={
             'hparams/AP': coco_ap.ap,
