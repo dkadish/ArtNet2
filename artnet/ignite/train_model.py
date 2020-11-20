@@ -58,6 +58,8 @@ def run(warmup_iterations=5000, batch_size=4, test_size=2000, epochs=10, log_int
         'patience': patience
     }
 
+    print('Hparams: ', hparam_dict)
+
     # Define train and test datasets
     train_loader, val_loader, labels_enum = get_data_loaders(train_dataset_ann_file,
                                                              val_dataset_ann_file,
