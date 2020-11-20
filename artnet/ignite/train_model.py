@@ -2,6 +2,7 @@ import copy
 import logging
 import os
 import pickle
+import shutil
 from argparse import ArgumentParser, ArgumentDefaultsHelpFormatter
 from itertools import chain
 
@@ -251,10 +252,13 @@ def run(warmup_iterations=5000, batch_size=4, test_size=2000, epochs=10, log_int
         hparam_dict['total_epochs'] = global_step_from_engine(engine)(engine, Events.EPOCH_COMPLETED)
 
         try:
+            shutil.copyfile(os.path.join(output_dir, 'hparams.pickle'), os.path.join(output_dir, 'hparams.pickle.backup'))
             with open(os.path.join(output_dir, 'hparams.pickle'), 'wb') as f:
                 pickle.dump(hparam_dict, f)
-        except AttributeError as e:q
+        except AttributeError as e:
             print('Could not pickle one of the total vars.', e)
+            os.replace(os.path.join(output_dir, 'hparams.pickle.backup'), os.path.join(output_dir, 'hparams.pickle'))
+
 
         writer.add_hparams(hparam_dict=hparam_dict, metric_dict={
             'hparams/AP': coco_ap.ap,
