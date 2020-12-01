@@ -69,10 +69,12 @@ def run(warmup_iterations=5000, batch_size=4, test_size=2000, epochs=10, log_int
 
     # Load checkpoint if available
     if input_checkpoint:
-        logger.info('Loading model checkpoint from '.format(input_checkpoint))
-        input_checkpoint = torch.load(input_checkpoint, map_location=torch.device(device))
+        hparam_path = Path(input_checkpoint).parent / 'hparams.pickle'
 
-        with open(str(Path(input_checkpoint).parent / 'hparams.pickle'), 'rb') as f:
+        logger.info('Loading model checkpoint from '.format(input_checkpoint))
+        input_checkpoint = torch.load(input_checkpoint, map_location=torch.device(device)) #FIXME Bad overload
+
+        with open(hparam_path, 'rb') as f:
             hparam_dict = pickle.load(f)
 
     print('Hparams: ', hparam_dict)
