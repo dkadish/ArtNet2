@@ -5,6 +5,7 @@ import pickle
 import shutil
 from argparse import ArgumentParser, ArgumentDefaultsHelpFormatter
 from itertools import chain
+from pathlib import Path
 
 import torch
 from ignite.contrib.handlers import TensorboardLogger, BasicTimeProfiler
@@ -40,6 +41,11 @@ def run(warmup_iterations=5000, batch_size=4, test_size=2000, epochs=10, log_int
         weight_decay=0.0005, use_mask=True, use_toy_testing_data=False, backbone_name='resnet101', num_workers=6,
         trainable_layers=3, train_set_size=None, early_stopping=False, patience=3, step_size=3, gamma=0.1,
         record_histograms=True):
+
+    # Set the training device to GPU if available - if not set it to CPU
+    device = torch.cuda.current_device() if torch.cuda.is_available() else torch.device('cpu')
+    torch.backends.cudnn.benchmark = True if torch.cuda.is_available() else False  # optimization for fixed input size
+
     # Write hyperparams
     hparam_dict = {
         'warmup_iterations': warmup_iterations,
@@ -55,8 +61,19 @@ def run(warmup_iterations=5000, batch_size=4, test_size=2000, epochs=10, log_int
         'step_size': step_size,
         'gamma': gamma,
         'early_stopping': early_stopping,
-        'patience': patience
+        'patience': patience,
+        'total_iterations': 0,
+        'total_epochs': 0,
+        'timeout': True,
     }
+
+    # Load checkpoint if available
+    if input_checkpoint:
+        logger.info('Loading model checkpoint from '.format(input_checkpoint))
+        input_checkpoint = torch.load(input_checkpoint, map_location=torch.device(device))
+
+        with open(Path(input_checkpoint).parent / 'hparams.pickle', 'rb') as f:
+            hparam_dict = pickle.load(f)
 
     print('Hparams: ', hparam_dict)
 
@@ -86,10 +103,6 @@ def run(warmup_iterations=5000, batch_size=4, test_size=2000, epochs=10, log_int
 
     logger.info('Training with {} classes...'.format(num_classes))
 
-    # Set the training device to GPU if available - if not set it to CPU
-    device = torch.cuda.current_device() if torch.cuda.is_available() else torch.device('cpu')
-    torch.backends.cudnn.benchmark = True if torch.cuda.is_available() else False  # optimization for fixed input size
-
     if use_mask:
         logger.debug('Loading MaskRCNN Model...')
         model = get_model_instance_segmentation(num_classes, configuration_data.get('mask_predictor_hidden_layer'))
@@ -108,8 +121,6 @@ def run(warmup_iterations=5000, batch_size=4, test_size=2000, epochs=10, log_int
     model.to(device)
 
     if input_checkpoint:
-        logger.info('Loading model checkpoint from '.format(input_checkpoint))
-        input_checkpoint = torch.load(input_checkpoint, map_location=torch.device(device))
         model.load_state_dict(input_checkpoint['model'])
 
     logger.debug('Initializing SummaryWriter...')
@@ -227,6 +238,8 @@ def run(warmup_iterations=5000, batch_size=4, test_size=2000, epochs=10, log_int
     @trainer.on(Events.EPOCH_COMPLETED)
     def on_epoch_completed(engine):
         logger.debug('Finished Epoch...')
+        update_hparams(engine)
+
         engine.state.scheduler.step()
         evaluator.run(val_loader)
         # for res_type in evaluator.state.coco_evaluator.iou_types:
@@ -250,17 +263,7 @@ def run(warmup_iterations=5000, batch_size=4, test_size=2000, epochs=10, log_int
     @trainer.on(Events.COMPLETED)
     def on_training_completed(engine):
         logger.debug('Finished Training...')
-        hparam_dict['total_iterations'] = global_step_from_engine(engine)(engine, Events.ITERATION_COMPLETED)
-        hparam_dict['total_epochs'] = global_step_from_engine(engine)(engine, Events.EPOCH_COMPLETED)
-
-        try:
-            shutil.copyfile(os.path.join(output_dir, 'hparams.pickle'), os.path.join(output_dir, 'hparams.pickle.backup'))
-            with open(os.path.join(output_dir, 'hparams.pickle'), 'wb') as f:
-                pickle.dump(hparam_dict, f)
-        except AttributeError as e:
-            print('Could not pickle one of the total vars.', e)
-            os.replace(os.path.join(output_dir, 'hparams.pickle.backup'), os.path.join(output_dir, 'hparams.pickle'))
-
+        update_hparams(engine, finished=True)
 
         writer.add_hparams(hparam_dict=hparam_dict, metric_dict={
             'hparams/AP': coco_ap.ap,
@@ -268,6 +271,23 @@ def run(warmup_iterations=5000, batch_size=4, test_size=2000, epochs=10, log_int
             'hparams/AP.75': coco_ap_075.ap75
         })
         logger.debug('Wrote hparams...')
+
+    def update_hparams(engine, finished=False):
+        hparam_dict['total_iterations'] = global_step_from_engine(engine)(engine, Events.ITERATION_COMPLETED)
+        hparam_dict['total_epochs'] = global_step_from_engine(engine)(engine, Events.EPOCH_COMPLETED)
+        hparam_dict['timeout'] = not finished
+
+        if hparam_dict['train_set_size'] is None:
+            hparam_dict['train_set_size'] = hparam_dict['training_set_size']
+
+        try:
+            shutil.copyfile(os.path.join(output_dir, 'hparams.pickle'),
+                            os.path.join(output_dir, 'hparams.pickle.backup'))
+            with open(os.path.join(output_dir, 'hparams.pickle'), 'wb') as f:
+                pickle.dump(hparam_dict, f)
+        except AttributeError as e:
+            print('Could not pickle one of the total vars.', e)
+            os.replace(os.path.join(output_dir, 'hparams.pickle.backup'), os.path.join(output_dir, 'hparams.pickle'))
 
     @evaluator.on(Events.STARTED)
     def on_evaluation_started(engine):
