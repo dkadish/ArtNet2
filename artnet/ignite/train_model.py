@@ -208,7 +208,7 @@ def run(warmup_iterations=5000, batch_size=4, test_size=2000, epochs=10, log_int
                 engine.state.scheduler.load_state_dict(input_checkpoint['lr_scheduler'])
 
             # Load traininer states
-            trainer.state.epoch = input_checkpoint['epoch'] + 1
+            trainer.state.epoch = input_checkpoint['epoch']
             if 'iteration' in input_checkpoint:
                 trainer.state.iteration = input_checkpoint['iteration']
             else:
