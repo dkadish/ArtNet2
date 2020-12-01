@@ -72,7 +72,7 @@ def run(warmup_iterations=5000, batch_size=4, test_size=2000, epochs=10, log_int
         logger.info('Loading model checkpoint from '.format(input_checkpoint))
         input_checkpoint = torch.load(input_checkpoint, map_location=torch.device(device))
 
-        with open(Path(input_checkpoint).parent / 'hparams.pickle', 'rb') as f:
+        with open(str(Path(input_checkpoint).parent / 'hparams.pickle'), 'rb') as f:
             hparam_dict = pickle.load(f)
 
     print('Hparams: ', hparam_dict)
