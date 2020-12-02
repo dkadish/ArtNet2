@@ -383,6 +383,8 @@ if __name__ == "__main__":
                         help='Loading model weights from this checkpoint.')
     parser.add_argument('--load_optimizer', default=False, type=bool,
                         help='Use optimizer and lr_scheduler saved in the input checkpoint to resume training')
+    parser.add_argument('--load_params', default=False, type=bool,
+                        help='Use hparameters from the saved pickle file to resume training')
     parser.add_argument("--output_dir", type=str, default="./checkpoints",
                         help="output directory for saving models checkpoints")
     parser.add_argument("--log_dir", type=str, default="./runs",
