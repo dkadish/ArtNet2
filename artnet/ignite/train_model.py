@@ -211,18 +211,19 @@ def run(warmup_iterations=5000, batch_size=4, test_size=2000, epochs=10, log_int
         engine.state.scheduler = torch.optim.lr_scheduler.StepLR(engine.state.optimizer, step_size=step_size,
                                                                  gamma=gamma)
         if input_checkpoint:
-
-            if load_optimizer:
-                logger.info('Loading optimizer and scheduler...')
-                engine.state.optimizer.load_state_dict(input_checkpoint['optimizer'])
-                engine.state.scheduler.load_state_dict(input_checkpoint['lr_scheduler'])
-
             # Load traininer states
             trainer.state.epoch = input_checkpoint['epoch']
             if 'iteration' in input_checkpoint:
                 trainer.state.iteration = input_checkpoint['iteration']
             else:
                 trainer.state.iteration = int(hparam_dict['training_set_size'] / batch_size * input_checkpoint['epoch'])
+
+            if load_optimizer:
+                logger.info('Loading optimizer and scheduler...')
+                engine.state.optimizer.load_state_dict(input_checkpoint['optimizer'])
+                engine.state.scheduler.load_state_dict(input_checkpoint['lr_scheduler'])
+                engine.state.scheduler.last_epoch = trainer.state.epoch
+
 
     @trainer.on(Events.EPOCH_STARTED)
     def on_epoch_started(engine):
