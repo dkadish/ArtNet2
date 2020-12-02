@@ -213,6 +213,7 @@ def run(warmup_iterations=5000, batch_size=4, test_size=2000, epochs=10, log_int
         if input_checkpoint:
 
             if load_optimizer:
+                logger.info('Loading optimizer and scheduler...')
                 engine.state.optimizer.load_state_dict(input_checkpoint['optimizer'])
                 engine.state.scheduler.load_state_dict(input_checkpoint['lr_scheduler'])
 
