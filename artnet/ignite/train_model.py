@@ -5,6 +5,7 @@ import pickle
 import shutil
 from argparse import ArgumentParser, ArgumentDefaultsHelpFormatter
 from itertools import chain
+from operator import itemgetter
 from pathlib import Path
 
 import torch
@@ -37,11 +38,11 @@ logging.getLogger('ignite.engine.engine.Engine').setLevel(logging.INFO)
 def run(warmup_iterations=5000, batch_size=4, test_size=2000, epochs=10, log_interval=100, debug_images_interval=50,
         train_dataset_ann_file='~/bigdata/coco/annotations/instances_train2017.json',
         val_dataset_ann_file='~/bigdata/coco/annotations/instances_val2017.json', input_checkpoint='',
-        load_optimizer=False, output_dir="/tmp/checkpoints", log_dir="/tmp/tensorboard_logs", lr=0.005, momentum=0.9,
+        load_optimizer=False, load_params=False, output_dir="/tmp/checkpoints", log_dir="/tmp/tensorboard_logs",
+        lr=0.005, momentum=0.9,
         weight_decay=0.0005, use_mask=True, use_toy_testing_data=False, backbone_name='resnet101', num_workers=6,
         trainable_layers=3, train_set_size=None, early_stopping=False, patience=3, step_size=3, gamma=0.1,
         record_histograms=True):
-
     # Set the training device to GPU if available - if not set it to CPU
     device = torch.cuda.current_device() if torch.cuda.is_available() else torch.device('cpu')
     torch.backends.cudnn.benchmark = True if torch.cuda.is_available() else False  # optimization for fixed input size
@@ -72,10 +73,18 @@ def run(warmup_iterations=5000, batch_size=4, test_size=2000, epochs=10, log_int
         hparam_path = Path(input_checkpoint).parent / 'hparams.pickle'
 
         logger.info('Loading model checkpoint from '.format(input_checkpoint))
-        input_checkpoint = torch.load(input_checkpoint, map_location=torch.device(device)) #FIXME Bad overload
+        input_checkpoint = torch.load(input_checkpoint, map_location=torch.device(device))  # FIXME Bad overload
 
         with open(hparam_path, 'rb') as f:
             hparam_dict = pickle.load(f)
+
+        # Load the training parameters from the saved hparam dictionary
+        if load_params:
+            warmup_iterations, batch_size, test_size, epochs, trainable_layers, load_optimizer, lr, momentum,\
+            weight_decay, train_set_size, step_size, gamma, early_stopping, patience = itemgetter(
+                'warmup_iterations', 'training_batch_size', 'test_size', 'epochs', 'trainable_layers', 'load_optimizer',
+                'lr', 'momentum', 'weight_decay', 'train_set_size', 'step_size', 'gamma', 'early_stopping',
+                'patience')(hparam_dict)
 
     print('Hparams: ', hparam_dict)
 
@@ -213,7 +222,6 @@ def run(warmup_iterations=5000, batch_size=4, test_size=2000, epochs=10, log_int
                 trainer.state.iteration = input_checkpoint['iteration']
             else:
                 trainer.state.iteration = int(hparam_dict['training_set_size'] / batch_size * input_checkpoint['epoch'])
-
 
     @trainer.on(Events.EPOCH_STARTED)
     def on_epoch_started(engine):
