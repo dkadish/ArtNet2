@@ -54,7 +54,6 @@ def run(warmup_iterations=5000, batch_size=4, test_size=2000, epochs=10, log_int
         'test_size': test_size,
         'epochs': epochs,
         'trainable_layers': trainable_layers,
-        'load_optimizer': load_optimizer,
         'lr': lr,
         'momentum': momentum,
         'weight_decay': weight_decay,
@@ -80,11 +79,12 @@ def run(warmup_iterations=5000, batch_size=4, test_size=2000, epochs=10, log_int
 
         # Load the training parameters from the saved hparam dictionary
         if load_params:
-            warmup_iterations, batch_size, test_size, epochs, trainable_layers, load_optimizer, lr, momentum,\
+            warmup_iterations, batch_size, test_size, epochs, trainable_layers, lr, momentum,\
             weight_decay, train_set_size, step_size, gamma, early_stopping, patience = itemgetter(
-                'warmup_iterations', 'training_batch_size', 'test_size', 'epochs', 'trainable_layers', 'load_optimizer',
+                'warmup_iterations', 'training_batch_size', 'test_size', 'epochs', 'trainable_layers',
                 'lr', 'momentum', 'weight_decay', 'train_set_size', 'step_size', 'gamma', 'early_stopping',
                 'patience')(hparam_dict)
+            train_set_size -= 1
 
     print('Hparams: ', hparam_dict)
 
