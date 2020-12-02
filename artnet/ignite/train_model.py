@@ -195,7 +195,7 @@ def run(warmup_iterations=5000, batch_size=4, test_size=2000, epochs=10, log_int
     @trainer.on(Events.STARTED)
     def on_training_started(engine):
         # construct an optimizer
-        logger.debug('Started Training...')
+        logger.info('Started Training...')
         params = [p for p in model.parameters() if p.requires_grad]
         engine.state.optimizer = torch.optim.SGD(params,
                                                  lr=lr,
@@ -425,5 +425,7 @@ if __name__ == "__main__":
         utils.mkdir(args.output_dir)
     if not os.path.exists(args.log_dir):
         utils.mkdir(args.log_dir)
+
+    print(args)
 
     run(**dict(args._get_kwargs()))
