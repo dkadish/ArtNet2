@@ -84,7 +84,10 @@ def run(warmup_iterations=5000, batch_size=4, test_size=2000, epochs=10, log_int
                 'warmup_iterations', 'training_batch_size', 'test_size', 'epochs', 'trainable_layers',
                 'lr', 'momentum', 'weight_decay', 'train_set_size', 'step_size', 'gamma', 'early_stopping',
                 'patience')(hparam_dict)
-            train_set_size -= 1
+            try:
+                train_set_size -= 1
+            except TypeError as e:
+                pass
 
     print('Hparams: ', hparam_dict)
 
